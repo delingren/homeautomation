@@ -2,14 +2,21 @@
 
 ## Mechanics and hardware
 
-My garage door opener is extremely easy to control. The wall mount switch simply shorts two leads. When you press the button, if the motor is running (the door is being opened or closed), it stops the motor; otherwise, it starts the motor in the opposite direction. This is probably how most dumb garage openers work.
+My garage door opener is very rudimentary. The wall mount switch simply shorts two leads. When you press the button the following logic applies:
 
-I am using an ESP32 MCU to control the garage door opener via a relay. The status of the garage door is detected by two reed switches, one placed at the open position and one placed at the closed position. A magnet is mounted on the shuttle of the opener and the switches are mounted on the track.
+* If the door is closed, it runs the motor to open it.
+* If the door is open, it runs the motor to close it.
+* If the motor is running (opening or closing), it stops the motor.
+* If the motor is stopped but the door is half open, it starts the motor opposite of the direction it was previously running.
 
-In addition, I am using two LEDs, one green and one red to physically indicate the position of the door.
+This is probably how most dumb garage openers work, or at least in a similar fasion. The remote works exactly as the button.
 
-* Microcontroller  
-WiFi ESP WROOM-32  
+In this project, I am using an ESP32 MCU to control the garage door opener via a relay. The status of the garage door is detected by two sensors, one placed at the open position and one placed at the closed position. They are reed switches. A magnet is mounted on the shuttle of the arm and the switches are mounted on the track.
+
+In addition, I am using two LEDs, one green and one red to physically indicate the position of the door. And I installed a push button to reset the MCU in case I need to reboot it for any reason. The switch simply shorts EN pin to GND. Other MCUs have different mechanisms for resetting externally.
+
+* Dev board  
+WiFi ESP WROOM-32
 Pinout:  
 ![pinout](esp32-38pin.png)
 
@@ -32,7 +39,6 @@ I am running Homebridge on a Linux machine to integrate with HomeKit.
 ### Development settings  
 * Arduino IDE, board: uPesy ESP32 Wroom DevKit.
 * WiFi Library
-* HTTP Server Library
 
 ### Design
 
@@ -57,9 +63,9 @@ The way my garage door operates, while the door is being opened or closed, two t
 * A human presses the wall mount button or a remote and stops the door. 
 * The door hits an obstacle and reverses its direction.
 
-Therefore, we need to set a timeout after transitioning to opening or closing states. After the timeout, we should transition to unknown state.
+Therefore, we need to set a timeout after transitioning to opening or closing states. After the timeout, we should transition to stopped state. Every time we transition to opening or closing state, we start a timer. When the timer runs out, a timeout event is triggered.
 
-We have 4 events driven by the sensors and timeout. 
+There have 4 events driven by the sensors and timeout. 
 
 * U 1->0 (UF)
 * U 0->1 (UR)
@@ -67,6 +73,19 @@ We have 4 events driven by the sensors and timeout.
 * L 0->1 (LR)
 * Timeout (TO)
 
-LR: stopped -> closed, closing - > closed, opening -> closed, 
+Instead of drawing a state machine, I'm just listing all the transitions in the following table.
+
+```
+        |   UF   |   UR   |   LF   |   LR   |   TO   | 
+--------+--------+--------+--------+--------+--------+
+open    |closing |        |        |        |        |
+closed  |        |        |opening |        |        |
+opening |        |  open  |        | closed |stopped |
+closing |        |  open  |        | closed |stopped |
+stopped |        |  open  |        | closed |        |
+--------+--------+--------+--------+--------+--------+
+```
+
+All empty cells should be impossible transitions. Techincally, many are possible. E.g. stopped transitioning to opening or closing and opening to closing. But we have no way to tell, unless we install a device to detect the direction of the door's travel, which is complicated and unnecessary.
 
 ### Test cases
