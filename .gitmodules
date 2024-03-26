@@ -1,3 +1,6 @@
 [submodule "doors_and_windows/third_party/HomeSpan"]
 	path = doors_and_windows/third_party/HomeSpan
 	url = https://github.com/HomeSpan/HomeSpan.git
+[submodule "garage_door_opener/third_party/HomeSpan"]
+	path = garage_door_opener/third_party/HomeSpan
+	url = https://github.com/HomeSpan/HomeSpan.git
