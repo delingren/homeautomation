@@ -6,7 +6,7 @@ My house has a dumb garage door opener. And I wanted to integrate it with Apple'
 
 ## Mechanics and hardware
 
-My garage door opener is very rudimentary. The wall mount switch simply shorts two leads. When you press the button, the following logic applies:
+My garage door opener Genie [CM8600](https://www.geniecompany.com/product-support/model-cm8600---legacy-screw-drive-series) is very rudimentary. The wall mount switch simply shorts two leads. When you press the button, the following logic applies:
 
 * If the door is closed, it starts the motor to open it.
 * If the door is open, it starts the motor to close it.
@@ -34,13 +34,16 @@ To operate the door, I simply use a relay to simulate a button press. The relay 
 I am using this [5v Relay Module](https://www.amazon.com/dp/B00VRUAHLE). But any 5V DC relay with one normally open channel will do.
 
 * Sensors  
-I am using two [reed switches](https://www.amazon.com/gp/product/B0735BP1K4/). But any normally open switches will do.
+  - Option 1. Two [reed switches](https://www.amazon.com/gp/product/B0735BP1K4/). But any normally open switches will do.
+  - Option 2. Piggyback on existing limit switches. One wire goes to the ground. The other wire is open when the carriage is away and it carries 7.8v. Connect to a GPIO pin like this. The diode can be pretty much anything. The resistor is for protecting the GPIO pin. It should be one order of magnitude smaller than the pullup resistor. Something like 4.7K should be good.
 
 * Misc
 
 - Status LED
 - Push button
 - Reset button
+
+![Schematic](schematic.png)
 
 ## Sofwtare
 
