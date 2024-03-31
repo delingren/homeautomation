@@ -274,14 +274,14 @@ std::vector<DEV_GarageDoor *> DEV_GarageDoor::all_openers;
 void setup() {
   Serial.begin(115200);
 
-  homeSpan.setStatusPin(2).setControlPin(26).begin(Category::GarageDoorOpeners,
+  homeSpan.setStatusPin(32).setControlPin(26).begin(Category::GarageDoorOpeners,
                                                     "Garage Door");
 
   new SpanAccessory();
   new Service::AccessoryInformation();
   new Characteristic::Identify();
   new Characteristic::Name("Garage Door");
-  new DEV_GarageDoor(22, 23, 13);
+  new DEV_GarageDoor(23, 22, 13);
 
   homeSpan.autoPoll();
 }

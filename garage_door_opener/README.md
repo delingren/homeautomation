@@ -1,51 +1,56 @@
-# Garage Door Opener with ESP32
+# Smartifying a Garage Door Opener with ESP32
 
 ## Objective
 
-My house has a dumb garage door opener. And I wanted to integrate it with Apple's Home app so that I can monitor its status and operate it remotely. And I don't want to replace with a smart garage door opener or buy any off-the-shelf product.
+My house has a dumb garage door opener. And I wanted to integrate it with Apple's Home app so that I can monitor its status and operate it remotely. And I want to DIY. So here's the design of the control unit.
 
 ## Mechanics and hardware
 
-My garage door opener Genie [CM8600](https://www.geniecompany.com/product-support/model-cm8600---legacy-screw-drive-series) is very rudimentary. The wall mount switch simply shorts two leads. When you press the button, the following logic applies:
+My garage door opener Genie [CM8600](https://www.geniecompany.com/product-support/model-cm8600---legacy-screw-drive-series) is very rudimentary. The wall mount switch simply shorts two leads, one of which is the ground. When you press the button, the following logic applies:
 
 * If the door is closed, it starts the motor to open it.
 * If the door is open, it starts the motor to close it.
 * If the motor is running (opening or closing), it stops the motor.
 * If the motor is stopped but the door is half open, it starts the motor opposite of the direction it was previously running.
 
-Also, when it's closing and it detects an obstruction, it reverses the direction of the motor and reverts to an open position.
+Also, when it's closing and it detects an obstruction, it reverses the direction of the motor and reverts to an open position. This is probably how most dumb garage openers work, or at least in a similar fasion. The remote works exactly as the button.
 
-This is probably how most dumb garage openers work, or at least in a similar fasion. The remote works exactly as the button.
+Two limit switches are installed on the track. One for the open position (upper) and one for the closed position (lower). When the carriage hits a limit switch, the opener stops the motor. The limit switches are normally open. One of the leads is the ground. The other one appears to carry a +7.8V DC voltage.
 
-* Dev board  
-WiFi ESP WROOM-32
-Pinout:  
-![pinout](esp32-38pin.png)
+### Microcontroller
 
-The brain of the project is ESP32 MCU. I am using this MCU for the following reasons:
+The brain of the project is an ESP32 MCU. I am using this MCU for the following reasons:
 
 * It has built-in WiFi capability.
 * There is a HAP library in Arduino framework.
-* It is cheap.
+* It's cheap.
 
-To operate the door, I simply use a relay to simulate a button press. The relay is controled with a GPIO pin. The state of the garage door is detected by two reed switches, one placed at the open position (upper) and one placed at the closed position (lower). A magnet is mounted on the shuttle of the opener and the switches are mounted on the track. 
+Pinout:  
+![pinout](esp32-38pin.png)
 
-* Relay  
+To operate the door, I simply use a relay to simulate a button press. The relay is controled with a GPIO pin.
+
+### Relay  
 I am using this [5v Relay Module](https://www.amazon.com/dp/B00VRUAHLE). But any 5V DC relay with one normally open channel will do.
 
-* Sensors  
-  - Option 1. Two [reed switches](https://www.amazon.com/gp/product/B0735BP1K4/). But any normally open switches will do.
-  - Option 2. Piggyback on existing limit switches. One wire goes to the ground. The other wire is open when the carriage is away and it carries 7.8v. Connect to a GPIO pin like this. The diode can be pretty much anything. The resistor is for protecting the GPIO pin. It should be one order of magnitude smaller than the pullup resistor. Something like 4.7K should be good.
+### Sensors  
+For detecting the state of the door, I am piggybacking on the existing limit switches, instead of using my own sensors. The MCU and the opener share the ground. The GPIO pin is connected to the non-ground wire of the limit switch via a diode. When the siwtch is open, the diode prevents the 7.8v from backflowing to the GPIO. Essentially, the pin is free floating. So, it should be configured as a pullup input pin. When the switch closes, the GPIO is shorted to the ground. In practice, I found that there is a ~0.7v voltage drop on the diodes I'm using (1N4007, which is technically a rectifying diode, but I happened to have a whole lot). But that's low enough that the GPIO would still read low.
 
-* Misc
+Ideally, one would want to complately separate the two units. But I'm not too worried since an ESP32 is extremely cheap. And I don't want to deal with the hassle of installing two extra mechanical or magnetic switches and running the wires.
 
+Alternative: I could also use two [reed switches](https://www.amazon.com/gp/product/B0735BP1K4/) and a magnet on the carriage.
+
+### Indicators
+To make it easy to visualize the status of the switches, I am using two LEDs, one red and one green, tied to the limit switches. When a switch is closed, the corresponding LED lights up. The anode is connected to +5v and the cathode is connected to the GPIO pin. I'm using the +5v instead of the +3.3v due to that 0.7v drop on the 1N4007, which would reduce 3.3 to ~2.6, a bit low for the LEDs I have on hand. In practice, I am only getting ~4.6v from the +5v pin when powered through the USB port. I thought it was directed connected to the Vcc of the USB port? Oh well. The remaining 3.9v is good enough for the LEDs and I'm using very small current limiting resistors (27 Ohm) here.
+
+### Misc
 - Status LED
-- Push button
+- Control button
 - Reset button
 
 ![Schematic](schematic.png)
 
-## Sofwtare
+## Software
 
 ### Development settings  
 * Arduino IDE
