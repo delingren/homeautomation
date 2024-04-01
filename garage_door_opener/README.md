@@ -19,9 +19,10 @@ Two limit switches are installed on the track. One for the open position (upper)
 
 ### Microcontroller
 
-The brain of the project is an ESP32 MCU. I am using this MCU for the following reasons:
+The brain of the project is an ESP32-WROOM-32UE MCU. I am using this MCU for the following reasons:
 
 * It has built-in WiFi capability.
+* It comes with an external antenna connector.
 * There is a HAP library in Arduino framework.
 * It's cheap.
 
@@ -41,13 +42,20 @@ Ideally, one would want to complately separate the two units. But I'm not too wo
 Alternative: I could also use two [reed switches](https://www.amazon.com/gp/product/B0735BP1K4/) and a magnet on the carriage.
 
 ### Indicators
-To make it easy to visualize the status of the switches, I am using two LEDs, one red and one green, tied to the limit switches. When a switch is closed, the corresponding LED lights up. The anode is connected to +5v and the cathode is connected to the GPIO pin. I'm using the +5v instead of the +3.3v due to that 0.7v drop on the 1N4007, which would reduce 3.3 to ~2.6, a bit low for the LEDs I have on hand. In practice, I am only getting ~4.6v from the +5v pin when powered through the USB port. I thought it was directed connected to the Vcc of the USB port? Oh well. The remaining 3.9v is good enough for the LEDs and I'm using very small current limiting resistors (27 Ohm) here.
+To make it easy to visualize the status of the switches, I am using two LEDs, one red and one green, tied to the limit switches. When a switch is closed, the corresponding LED lights up. The anode is connected to +5v and the cathode is connected to the GPIO pin. I'm using the +5v instead of the +3.3v due to that 0.7v drop on the 1N4007, which would reduce 3.3 to ~2.6, a bit low for the LEDs I have on hand. One caveat here is that the +5v is not regulated on the board. So there's a risk of frying the LEDs even with a small increase of voltage. But I using a quality iPhone USB power adapter, so it shouldn't be a problem.
+
+Also, interestingly, in practice, I am only getting ~4.6v from the +5v pin when powered through the USB port. I thought it was directed connected to the Vcc of the USB port? Oh well. The remaining 3.9v is good enough for the LEDs and I'm using very small current limiting resistors (27 Ohm) here.
 
 ### Misc
-- Status LED
-- Control button
-- Reset button
+- Status LED. Optionally, HomeSpan uses an LED to indicate its status. I am using a blue LED for this purpose.
+- Control button. You can also interact with HomeSpan with a pushbutton.
+- Reset button. I am also using a pushbutton for resetting the devices, which is a bit easier than disconnecting the power supply.
+- Antenna & U/FL to PR-SMA adapter. Since this device is running in the garage, where the WiFi reception isn't the strongest, I am using a board with an external antenna connector. 
+- USB C breakout pad. My ESP32 dev board comes with a micro USB port and I want to power it with a USB C plug. What's more, I don't want the layout to be constrained by the position of the USB port. Therefore I'm using a USB breakout board to interface with the outside. 
+- PCB. I am not well versed in designing PCB boards. And it's too much hassle to manufacture just one board. So I'm using a [solderable breadboard](https://www.amazon.com/EPLZON-Solderable-Breadboard-Gold-Plated-Electronics/dp/B0BP28GYTV) like this:  
+![Solderable Breadboard](solderable_breadboard.jpg)
 
+### Schematic
 ![Schematic](schematic.png)
 
 ## Software
@@ -103,5 +111,14 @@ STOPPED |        |  OPEN  |        | CLOSED |        |
 ```
 
 All empty cells should be invalid transitions, as far as our unit is concerned. Some are due to lack of information. E.g. the door could transition from STOPPED to both OPENING or CLOSING. But since such operations don't go through our unit, we have no way to detect. So we stay in STOPPED until the opening or closing finishes and triggers a transition to OPEN or CLOSED.
+
+### Prototyping and debugging
+I used a dev board with a PCB antenna for prototyping. Interestingly, when inserted into a breadboard, it does not connect to the WiFi, probably due to shielding of the metal in the breadboard. This is another reason I decided to get a board with an external antenna for the final product. This made prototyping difficult because I can't use the breadboard. So, here's the prototype I built:
+
+![prototype](IMG_0917.jpeg)
+
+The two rocker switches simulate the limit switches. The two pushbuttons were harvested from old mice. Their pins are 5mm pitch.
+
+To debug the final product where the USB port on the ESP is hard to reach, I use a USB to UART CP2102 adapter. Connect 5v, GND, Rx and Tx pins. To upload a sketch, you need to press and bold boot, then press and release reset. After uploading the sketch, you'll need to manually reset.
 
 ### Test cases
