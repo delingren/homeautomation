@@ -25,7 +25,7 @@ THE SOFTWARE.
 #include "src/HomeSpan.h"
 #include <utility>
 
-// Represents a contact sensor typically used by security system to monitor the
+// Represents a contact sensor typically used by security systems to monitor the
 // status of doors and windows. The sensor is connected to a pullup input pin
 // and the ground. When it's open, the pin is pulled up high. When it's closed,
 // it's pulled to the ground. Debouncing is done in the software.
