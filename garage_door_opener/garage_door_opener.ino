@@ -14,7 +14,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
   // well for my garage door.
   const unsigned long millis_relay = 500;
 
-  // These values are the same as the enum defined in
+  // These values are the same as the those defined in
   // GarageDoorOpener::CurrentDoorState. We would use that enum but it's
   // anonymous.
   enum door_state {
@@ -126,54 +126,13 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
                : 0xFFFFFFFF - (millis_then - millis_now) + 1;
   }
 
-  void reach_target_state(uint8_t target_state) {
-    if (!pending_operation) {
-      return;
-    }
-
-    // 1. If the target state matches the current state, do nothing.
-    // 2. If the target state is the opposite of the current state, trigger the
-    // relay to simulate a button press.
-    // 3. If the current state is either OPENING or CLOSING, the safest approach
-    // is to do nothing for now, but wait till it's reached one of the three
-    // other states and come back here.
-    // 4. If we are in the STOPPED state, trigger the relay. But we don't know
-    // which direction the door will be moving. So we do that anyway and wait
-    // till it's reached OPEN or CLOSED state. If the state doesn't match the
-    // target state, we trigger the relay again.
-
-    // TODO: if there is an obstruction, and we try to close, we could be stuck
-    // in an infinite loop: OPEN -> CLOSING -> (reversing, but unknown to us) ->
-    // OPEN. Should we not try at all or do it anway and devise a mechanism to
-    // detect such infinite loops?
-    if (target_state == Characteristic::TargetDoorState::OPEN) {
-      if (state == door_state::OPEN) {
-        Serial.println("-- OPEN operation completed.");
-        pending_operation = false;
-      }
-      if (state == door_state::CLOSED || state == door_state::STOPPED) {
-        Serial.printf(
-            "-- Trying to reach target state %s from current state %s.\n",
-            target_state_to_string(target_state), door_state_to_string(state));
-        trigger_relay();
-      }
-    } else {
-      if (state == door_state::CLOSED) {
-        Serial.println("-- CLOSE operation completed.");
-        pending_operation = false;
-      }
-      if (state == door_state::OPEN || state == door_state::STOPPED) {
-        Serial.printf(
-            "-- Trying to reach target state %s from current state %s.\n",
-            target_state_to_string(target_state), door_state_to_string(state));
-        trigger_relay();
-      }
-    }
-  }
-
   void transition(door_state new_state) {
     Serial.printf("-- Transitioning from %s to %s.\n",
                   door_state_to_string(state), door_state_to_string(new_state));
+
+    door_state old_state = state;
+    state = new_state;
+    current_state.setVal(state);
 
     // When closing, my opener reverses the course if it detects an
     // obstruction. So, if we see a CLOSING -> OPEN transition, we consider
@@ -181,38 +140,16 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     // possible with manual intervention with the wall mount switch or a
     // remote. But there is no way for us to distinguish. In that case, we
     // will let the human correct the situation by pressing the switch again.
-    if (state == door_state::CLOSING && new_state == door_state::OPEN) {
-      Serial.println("-- Obstruction detected.");
-    }
-
-    obstruction.setVal(state == door_state::CLOSING &&
-                       new_state == door_state::OPEN);
-
-    // If the door is being opened or closed manually, we need to set the target
-    // state so that the Home apps is not confused.
-    if (new_state == door_state::OPENING) {
+    if (old_state == door_state::CLOSING && new_state == door_state::OPEN) {
+      Serial.printf("-- Obstruction detected. Abandoning pending operation if "
+                    "applicable.\n");
+      obstruction.setVal(true);
+      pending_operation = false;
       target_state.setVal(Characteristic::TargetDoorState::OPEN);
+      return;
     }
 
-    if (new_state == door_state::CLOSING) {
-      target_state.setVal(Characteristic::TargetDoorState::CLOSED);
-    }
-
-    // If we were stopped, we have probably previously set a target state. Now
-    // we have been fully opened or close, this doesn't necessarily agree with
-    // that previously set state. So, we need to let the Home app know.
-    // An example scenario:
-    //   1. Manually trigger CLOSED -> OPENING, setting target state to OPEN
-    //   2. Manually stop the door, causing a timeout, OPENING -> STOPPED
-    //   3. Later, manually close the door, STOPPED -> CLOSED
-    //   4. Now the target state is OPEN but the door is CLOSED
-    if (state == door_state::STOPPED && new_state == door_state::OPEN) {
-      target_state.setVal(Characteristic::TargetDoorState::OPEN);
-    }
-
-    if (state == door_state::STOPPED && new_state == door_state::CLOSED) {
-      target_state.setVal(Characteristic::TargetDoorState::CLOSED);
-    }
+    obstruction.setVal(false);
 
     if (new_state == door_state::OPENING || new_state == door_state::CLOSING) {
       Serial.println("-- Starting the timer.");
@@ -222,18 +159,91 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       millis_timer = 0;
     }
 
-    state = new_state;
-    current_state.setVal(state);
-
-    // Check if we have a pending operation.
-    reach_target_state(target_state.getVal());
+    if (pending_operation) {
+      // We are still trying to complete an operation requested by the Home app.
+      uint8_t target = target_state.getVal();
+      switch (state) {
+      case door_state::STOPPED:
+        // We are here because of a manual intervention. So we abandon the
+        // pending operation, assuming that's why the user intervened.
+        Serial.printf("-- Abandoning pending operation.\n");
+        pending_operation = false;
+        break;
+      case door_state::OPEN:
+        if (target == Characteristic::TargetDoorState::CLOSED) {
+          Serial.printf("-- Continuing pending CLOSE operation.\n");
+          trigger_relay();
+        } else {
+          Serial.printf("-- Completed OPEN operation.\n");
+          pending_operation = false;
+        }
+        break;
+      case door_state::CLOSED:
+        if (target == Characteristic::TargetDoorState::OPEN) {
+          Serial.printf("-- Continuing pending OPEN operation.\n");
+          trigger_relay();
+        } else {
+          Serial.printf("-- Completed CLOSE operation.\n");
+          pending_operation = false;
+        }
+        break;
+      }
+    } else {
+      // If the door is being opened or closed manually, we need to set the
+      // target state so that the Home apps is not confused.
+      if (new_state == door_state::OPENING || new_state == door_state::OPEN) {
+        target_state.setVal(Characteristic::TargetDoorState::OPEN);
+      }
+      if (new_state == door_state::CLOSING || new_state == door_state::CLOSED) {
+        target_state.setVal(Characteristic::TargetDoorState::CLOSED);
+      }
+      return;
+    }
   }
 
   boolean update() override {
     Serial.printf("-- %s operation requested.\n",
                   target_state_to_string(target_state.getNewVal()));
-    pending_operation = true;
-    reach_target_state(target_state.getNewVal());
+    Serial.printf("-- Current state is %s.\n", door_state_to_string(state));
+
+    uint8_t target = target_state.getNewVal();
+
+    if (target == Characteristic::TargetDoorState::OPEN) {
+      switch (state) {
+      case door_state::OPEN:
+      case door_state::OPENING:
+        Serial.printf("-- Noop.\n");
+        break;
+      case door_state::CLOSING:
+        // Do nothing for now, but once we have reached the CLOSED state,
+        // trigger the relay to open.
+        Serial.printf("-- Noop, but setting pending_operation.\n");
+        pending_operation = true;
+        break;
+      case door_state::CLOSED:
+      case door_state::STOPPED:
+        pending_operation = true;
+        trigger_relay();
+        break;
+      }
+    } else {
+      switch (state) {
+      case door_state::CLOSED:
+      case door_state::CLOSING:
+        Serial.printf("-- Noop.\n");
+        break;
+      case door_state::OPENING:
+        Serial.printf("-- Noop, but setting pending_operation.\n");
+        pending_operation = true;
+        break;
+      case door_state::OPEN:
+      case door_state::STOPPED:
+        pending_operation = true;
+        trigger_relay();
+        break;
+      }
+    }
+
     return true;
   }
 
@@ -259,8 +269,8 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
   // motor failure, or a number of other reasons.
 
   void button(int pin, int type) override {
-    // This function is called whenever either sensor changes state, which means
-    // the door has reached or left either end of the track.
+    // This function is called whenever either sensor changes state, which
+    // means the door has reached or left either end of the track.
 
     if (pin == pin_upper && type == SpanButton::OPEN) {
       // Upper, Rising
