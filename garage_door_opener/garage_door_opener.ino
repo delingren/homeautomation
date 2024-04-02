@@ -173,6 +173,14 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     obstruction.setVal(state == door_state::CLOSING &&
                        new_state == door_state::OPEN);
 
+    if (new_state == door_state::OPENING) {
+      target_state.setVal(Characteristic::TargetDoorState::OPEN);
+    }
+
+    if (new_state == door_state::CLOSING) {
+      target_state.setVal(Characteristic::TargetDoorState::CLOSED);
+    }
+
     if (new_state == door_state::OPENING || new_state == door_state::CLOSING) {
       Serial.println("-- Starting the timer.");
       millis_timer = millis();
