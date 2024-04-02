@@ -121,4 +121,204 @@ The two rocker switches simulate the limit switches. The two pushbuttons were ha
 
 To debug the final product where the USB port on the ESP is hard to reach, I use a USB to UART CP2102 adapter. Connect 5v, GND, Rx and Tx pins. To upload a sketch, you need to press and bold boot, then press and release reset. After uploading the sketch, you'll need to manually reset.
 
+## Assembly and installation
+The MCU and the relay
+* Enclosure
+  - Rest button
+  - Control button
+  - Status LED
+  - Antenna connector (RP-SMA)
+  - M16 connector (5 pins: GND, upper sensor, lower sensor, 2 relay outputs)
+  - Power cable slot
+
 ### Test cases
+These test cases are executed on a breadboard.
+
+#### Manual opening
+1. Start from CLOSED.
+1. Manually open lower sensor.
+1. Manually close upper sensor.
+
+* Expected: 
+  - tile: closed -> opening -> open.
+
+#### Manual opening with a timeout
+1. Start from CLOSED.
+1. Manually open lower sensor.
+1. Wait for a timeout.
+1. Manually close upper sensor.
+
+* Expected: 
+  - tile: closed -> opening -> open -> open.
+
+#### Manual opening then closing
+1. Start from CLOSED.
+1. Manually open lower sensor.
+1. Manually close lower sensor.
+
+* Expected: 
+  - tile: closed -> opening -> closed.
+
+#### Manual opening, timeout then closing
+1. Start from CLOSED.
+1. Manually open lower sensor.
+2. Wait for a timeout.
+1. Manually close lower sensor.
+
+* Expected: 
+  - tile: closed -> opening -> open -> closed.
+
+#### Manual closing
+1. Start from OPEN.
+1. Manually open upper sensor.
+1. Manually close lower sensor.
+
+* Expected:
+  - tile: open -> closing -> closed.
+
+#### Manual closing with a timeout
+1. Start from OPEN.
+1. Manually open upper sensor.
+1. Wait for a timeout
+1. Manually close lower sensor.
+
+* Expected: 
+  - tile: open -> closing -> open -> closed
+
+#### Manual closing with obstruction
+1. Start from OPEN.
+1. Manually open upper sensor.
+1. Manually close upper sensor.
+
+* Expected: 
+  - tile: open -> closing -> obstructed
+
+1. Tap the tile to close.
+1. Manually close lower sensor.
+
+* Expected: 
+  - relay: engaged and disengaged
+  - tile: obstructed -> closing -> closed
+
+#### Opening in app
+1. Start from CLOSED.
+1. Tap on the tile to open.
+1. Manually open lower sensor.
+1. Manually close upper sensor.
+
+* Expected: 
+  - relay: engaged and disengaged
+  - tile: closed -> opening -> open
+
+#### Opening in app with timeout
+1. Start from CLOSED.
+1. Tap on the tile to open.
+1. Manually open lower sensor.
+1. Wait for a timeout.
+1. Manually close upper sensor.
+
+* Expected:
+  - relay: engaged and disengaged
+  - tile: closed -> opening -> open -> open
+
+#### Opening in app with timeout then closing
+1. Start from CLOSED.
+1. Tap on the tile to open.
+1. Manually open lower sensor.
+1. Wait for a timeout.
+1. Manually close lower sensor.
+
+* Expected:
+  - relay: engaged and disengaged
+  - tile: closed -> opening -> open -> closed
+
+#### Closing in app
+1. Start from OPEN.
+1. Tap on the tile to close.
+1. Manually open upper sensor.
+1. Manually close lower sensor.
+
+#### Closing in app from STOPPED, 1
+1. Start from OPEN.
+1. Optionally, tap the tile to close.
+1. Manually open upper sensor.
+1. Wait for a timeout to reach STOPPED.
+1. Tap on the tile to close.
+1. Manually close lower sensor.
+
+* Expected:
+  - relay: engaged and disengaged after the tap(s)
+  - tile: open -> closing -> open -> closing -> closed
+
+#### Closing in app from STOPPED, 2
+1. Start from CLOSED.
+1. Optionally, tap the tile to open.
+1. Manually open lower sensor.
+1. Wait for a timeout to reach STOPPED.
+1. Tap on the tile to close.
+1. Manually close lower sensor.
+
+* Expected:
+  - relay: engaged and disengaged after the tap(s)
+  - tile: closed -> opening -> open -> closing -> closed
+
+#### Opening in app with motor failure
+1. Start from CLOSED.
+1. Tap the tile to open.
+1. Wait for a start timeout.
+
+* Expected:
+  - relay: clicks
+  - tile: closed -> opening -> closed
+
+1. Tap the tile to open again.
+1. Manually open lower sensor.
+1. Manuall close upper sensor.
+
+* Expected:
+  - relay: clicks
+  - tile: closed -> opening -> open
+
+#### Closing in app with motor failure
+1. Start from OPEN.
+1. Tap the tile to close.
+1. Wait for a start timeout.
+
+* Expected:
+  - relay: clicks
+  - tile: open -> closing -> open
+
+1. Tap the tile to close.
+1. Manually open upper sensor.
+1. Manually close lower sensor.
+
+* Expected:
+  - relay: clicks
+  - tile: open -> closing -> closed
+
+#### Opening in app from OPENING
+1. Start from OPENING
+1.
+* Expected: noop
+
+#### Opening in app from CLOSING
+1. Start from CLOSING
+1. 
+
+* Expected:
+  - relay: clicks after reaching CLOSED
+  - tile: closing -> closed -> opening -> open
+
+#### Closing in app from CLOSING
+1. Start from CLOSING
+1. Tap the tile to close
+
+* Expected: noop
+
+#### Closing in app from OPENING
+1. Start from OPENING
+1. Tap the tile to close
+
+* Expected:
+  - relay: clicks after reaching OPEN
+  - tile: opening -> open -> closing -> closed
