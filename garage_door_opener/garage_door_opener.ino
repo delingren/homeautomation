@@ -148,7 +148,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     // detect such infinite loops?
     if (target_state == Characteristic::TargetDoorState::OPEN) {
       if (state == door_state::OPEN) {
-        Serial.println("-- Open operation completed.");
+        Serial.println("-- OPEN operation completed.");
         pending_operation = false;
       }
       if (state == door_state::CLOSED || state == door_state::STOPPED) {
@@ -159,7 +159,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       }
     } else {
       if (state == door_state::CLOSED) {
-        Serial.println("-- Close operation completed.");
+        Serial.println("-- CLOSE operation completed.");
         pending_operation = false;
       }
       if (state == door_state::OPEN || state == door_state::STOPPED) {
@@ -230,7 +230,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
   }
 
   boolean update() override {
-    Serial.printf("-- Operation requested. Target state: %s.\n",
+    Serial.printf("-- %s operation requested.\n",
                   target_state_to_string(target_state.getNewVal()));
     pending_operation = true;
     reach_target_state(target_state.getNewVal());
