@@ -39,18 +39,17 @@ struct DEV_DoorWindow : Service::ContactSensor {
                       : Characteristic::ContactSensorState::NOT_DETECTED;
   }
 
-  SpanCharacteristic *state;
+  Characteristic::ContactSensorState state;
 
   SpanToggle *toggle;
 
   DEV_DoorWindow(uint8_t pin) : Service::ContactSensor() {
-    state = new Characteristic::ContactSensorState();
     pinMode(pin, INPUT_PULLUP);
 
     // Report initial state
     uint8_t value = digitalRead(pin);
     Serial.printf("---- Initial pin %d value: %d\n", pin, value);
-    state->setVal(pin_value_to_state(value));
+    state.setVal(pin_value_to_state(value));
 
     toggle = new SpanToggle(pin, PushButton::TRIGGER_ON_LOW, millis_debounce);
   }
@@ -64,7 +63,7 @@ struct DEV_DoorWindow : Service::ContactSensor {
   void button(int pin, int type) override {
     uint8_t value = type == SpanButton::OPEN ? HIGH : LOW;
     Serial.printf("---- Updating pin %d's value to %d\n", pin, value);
-    state->setVal(pin_value_to_state(value));
+    state.setVal(pin_value_to_state(value));
   }
 };
 
@@ -83,13 +82,13 @@ void setup() {
   new SpanAccessory();
   new Service::AccessoryInformation();
   new Characteristic::Identify();
-  new Characteristic::Name("Front Door");
+  new Characteristic::Name("Front Entrance");
   new DEV_DoorWindow(13);
 
   new SpanAccessory();
   new Service::AccessoryInformation();
   new Characteristic::Identify();
-  new Characteristic::Name("Garage Door");
+  new Characteristic::Name("Garage Entrance");
   new DEV_DoorWindow(4);
 
   new SpanAccessory();
