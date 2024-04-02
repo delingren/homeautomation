@@ -1,16 +1,18 @@
 #include "src/HomeSpan.h"
 #include <Arduino.h>
-#include <vector>
 
 struct DEV_GarageDoor : Service::GarageDoorOpener {
   // Debounce time for the contact sensors. Adjust based the particular sensor
-  // and probably the speed of the motor.
-  const unsigned long millis_debounce = 600;
-  // The longest time between triggering a sensor, after an opening or closing
+  // and the speed of the motor.
+  const unsigned long millis_debounce = 500;
+  // The longest time between triggering a sensor after an opening or closing
   // event starts. For my garage door, it reverses the course when it hits an
-  // obstruction, so this should be a little longer than the time it takes to
+  // obstruction, so set this to a little longer than the time it takes to
   // (almost) fully close and open again.
   const unsigned long millis_timeout = 5000;
+  // Time need to keep the relay on to trigger the motor. Half a second works
+  // well for my garage door.
+  const unsigned long millis_relay = 500;
 
   // These values are the same as the enum defined in
   // GarageDoorOpener::CurrentDoorState. We would use that enum but it's
@@ -23,24 +25,25 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     STOPPED = 4
   };
 
-  static std::vector<DEV_GarageDoor *> all_openers;
-
-  static void isr() {
-    // The interrupt handler for all sensor pins. I don't think there is an easy
-    // way to create an ISR for each individual pin. So they'll have to share an
-    // ISR.
-    for (auto it = all_openers.begin(); it != all_openers.end(); it++) {
-      uint8_t new_value_upper = digitalRead((*it)->pin_upper);
-      uint8_t new_value_lower = digitalRead((*it)->pin_lower);
-
-      // loop() will do the debouncing logic. We are only informing it that one
-      // of the sensors has changed state and when.
-      if (new_value_lower != (*it)->value_lower ||
-          new_value_upper != (*it)->value_upper) {
-        (*it)->sensor_triggered = true;
-        (*it)->millis_last = millis();
-      }
+  static const char *door_state_to_string(door_state state) {
+    switch (state) {
+    case door_state::OPEN:
+      return "OPEN";
+    case door_state::CLOSED:
+      return "CLOSED";
+    case door_state::OPENING:
+      return "OPENING";
+    case door_state::CLOSING:
+      return "CLOSING";
+    case door_state::STOPPED:
+      return "STOPPED";
+    default:
+      return "Huh?";
     }
+  }
+
+  static const char *target_state_to_string(uint8_t state) {
+    return state == Characteristic::TargetDoorState::OPEN ? "OPEN" : "CLOSED";
   }
 
   Characteristic::CurrentDoorState current_state;
@@ -51,15 +54,13 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
   uint8_t pin_lower;
   uint8_t pin_relay;
 
-  uint8_t value_upper;
-  uint8_t value_lower;
-
   door_state state = door_state::STOPPED;
 
-  bool sensor_triggered = false;
-  unsigned long millis_last = 0;
   unsigned long millis_timer = 0;
   bool pending_operation = false;
+
+  SpanToggle *toggle_upper;
+  SpanToggle *toggle_lower;
 
   DEV_GarageDoor(uint8_t pin_upper, uint8_t pin_lower, uint8_t pin_relay)
       : Service::GarageDoorOpener() {
@@ -67,16 +68,21 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     this->pin_lower = pin_lower;
     this->pin_relay = pin_relay;
 
+    toggle_upper =
+        new SpanToggle(pin_upper, PushButton::TRIGGER_ON_LOW, millis_debounce);
+    toggle_lower =
+        new SpanToggle(pin_lower, PushButton::TRIGGER_ON_LOW, millis_debounce);
+
     pinMode(pin_upper, INPUT_PULLUP);
     pinMode(pin_lower, INPUT_PULLUP);
-
-    value_upper = digitalRead(pin_upper);
-    value_lower = digitalRead(pin_lower);
 
     pinMode(pin_relay, OUTPUT);
     digitalWrite(pin_relay, LOW);
 
     // Determine the initial state.
+    uint8_t value_upper = digitalRead(pin_upper);
+    uint8_t value_lower = digitalRead(pin_lower);
+
     if (value_upper == LOW && value_lower == HIGH) {
       state = door_state::OPEN;
     } else if (value_upper == HIGH && value_lower == LOW) {
@@ -90,16 +96,24 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       state = door_state::STOPPED;
     }
     current_state.setVal(state);
+    Serial.printf("-- Initial state: %s.\n", door_state_to_string(state));
+  }
 
-    all_openers.push_back(this);
-    attachInterrupt(pin_upper, isr, CHANGE);
-    attachInterrupt(pin_lower, isr, CHANGE);
+  ~DEV_GarageDoor() {
+    if (toggle_upper != nullptr) {
+      delete toggle_upper;
+    }
+
+    if (toggle_lower != nullptr) {
+      delete toggle_lower;
+    }
   }
 
   void trigger_relay() {
-    Serial.println("Turning on the relay for 400 ms.");
+    Serial.printf("-- Turning on the relay for %d milliseconds.\n",
+                  millis_relay);
     digitalWrite(pin_relay, HIGH);
-    delay(400);
+    delay(millis_relay);
     digitalWrite(pin_relay, LOW);
   }
 
@@ -139,8 +153,8 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       }
       if (state == door_state::CLOSED || state == door_state::STOPPED) {
         Serial.printf(
-            "Trying to reach target state %d from current state %d.\n",
-            target_state, state);
+            "-- Trying to reach target state %s from current state %s.\n",
+            target_state_to_string(target_state), door_state_to_string(state));
         trigger_relay();
       }
     } else {
@@ -150,15 +164,16 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       }
       if (state == door_state::OPEN || state == door_state::STOPPED) {
         Serial.printf(
-            "Trying to reach target state %d from current state %d.\n",
-            target_state, state);
+            "-- Trying to reach target state %s from current state %s.\n",
+            target_state_to_string(target_state), door_state_to_string(state));
         trigger_relay();
       }
     }
   }
 
   void transition(door_state new_state) {
-    Serial.printf("-- Transitioning from %d to %d.\n", state, new_state);
+    Serial.printf("-- Transitioning from %s to %s.\n",
+                  door_state_to_string(state), door_state_to_string(new_state));
 
     // When closing, my opener reverses the course if it detects an
     // obstruction. So, if we see a CLOSING -> OPEN transition, we consider
@@ -173,11 +188,29 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     obstruction.setVal(state == door_state::CLOSING &&
                        new_state == door_state::OPEN);
 
+    // If the door is being opened or closed manually, we need to set the target
+    // state so that the Home apps is not confused.
     if (new_state == door_state::OPENING) {
       target_state.setVal(Characteristic::TargetDoorState::OPEN);
     }
 
     if (new_state == door_state::CLOSING) {
+      target_state.setVal(Characteristic::TargetDoorState::CLOSED);
+    }
+
+    // If we were stopped, we have probably previously set a target state. Now
+    // we have been fully opened or close, this doesn't necessarily agree with
+    // that previously set state. So, we need to let the Home app know.
+    // An example scenario:
+    //   1. Manually trigger CLOSED -> OPENING, setting target state to OPEN
+    //   2. Manually stop the door, causing a timeout, OPENING -> STOPPED
+    //   3. Later, manually close the door, STOPPED -> CLOSED
+    //   4. Now the target state is OPEN but the door is CLOSED
+    if (state == door_state::STOPPED && new_state == door_state::OPEN) {
+      target_state.setVal(Characteristic::TargetDoorState::OPEN);
+    }
+
+    if (state == door_state::STOPPED && new_state == door_state::CLOSED) {
       target_state.setVal(Characteristic::TargetDoorState::CLOSED);
     }
 
@@ -196,88 +229,89 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     reach_target_state(target_state.getVal());
   }
 
-  boolean update() {
+  boolean update() override {
+    Serial.printf("-- Operation requested. Target state: %s.\n",
+                  target_state_to_string(target_state.getNewVal()));
     pending_operation = true;
     reach_target_state(target_state.getNewVal());
     return true;
   }
 
-  void loop() {
-    // State transitions.
-    //         |   UR   |   UF   |   LR   |   LF   |   TO   |
-    // --------+--------+--------+--------+--------+--------+
-    // open    |closing |        |        |        |        |
-    // closed  |        |        |opening |        |        |
-    // opening |        |  open  |        | closed |stopped |
-    // closing |        |  open  |        | closed |stopped |
-    // stopped |        |  open  |        | closed |        |
-    // --------+--------+--------+--------+--------+--------+
+  // State transitions.
+  //         |   UR   |   UF   |   LR   |   LF   |   TO   |
+  // --------+--------+--------+--------+--------+--------+
+  // open    |closing |        |        |        |        |
+  // closed  |        |        |opening |        |        |
+  // opening |        |  open  |        | closed |stopped |
+  // closing |        |  open  |        | closed |stopped |
+  // stopped |        |  open  |        | closed |        |
+  // --------+--------+--------+--------+--------+--------+
 
-    // All empty cells are invalid. However, we always transition the the state
-    // determined by the previous pin values and current ones, even if we are in
-    // an invalid state. It's the only way we can recover. But we report such
-    // errors.
+  // All empty cells are invalid. However, we always transition the the state
+  // determined by the previous pin values and current ones, even if we are in
+  // an invalid state. It's the only way we can recover. But we report such
+  // errors.
 
-    // Timeout event: when transitioning into OPENING or CLOSING, we start a
-    // timer. The timer is stopped if we reach OPEN or CLOSED state. But once it
-    // runs out, we consider the door in the STOPPED state. This could be caused
-    // by manual intervention with a remote or wall switch, a power outage, a
-    // motor failure, or a number of other reasons.
-    if (!sensor_triggered && millis_timer != 0 &&
-        millis_since(millis_timer) > millis_timeout) {
+  // Timeout event: when transitioning into OPENING or CLOSING, we start a
+  // timer. The timer is stopped if we reach OPEN or CLOSED state. But once it
+  // runs out, we consider the door in the STOPPED state. This could be caused
+  // by manual intervention with a remote or wall switch, a power outage, a
+  // motor failure, or a number of other reasons.
+
+  void button(int pin, int type) override {
+    // This function is called whenever either sensor changes state, which means
+    // the door has reached or left either end of the track.
+
+    if (pin == pin_upper && type == SpanButton::OPEN) {
+      // Upper, Rising
+      if (state != door_state::OPEN) {
+        Serial.printf("-- Upper sensor falling. Invalid state: %s.\n",
+                      door_state_to_string(state));
+      }
+      transition(door_state::CLOSING);
+    }
+
+    if (pin == pin_upper && type == SpanButton::CLOSED) {
+      // Upper, Falling
+      if (state != door_state::OPENING && state != door_state::CLOSING &&
+          state != door_state::STOPPED) {
+        Serial.printf("-- Upper sensor rising. Invalid state: %s.\n",
+                      door_state_to_string(state));
+      }
+      transition(door_state::OPEN);
+    }
+
+    if (pin == pin_lower && type == SpanButton::OPEN) {
+      // Lower, Rising
+      if (state != door_state::CLOSED) {
+        Serial.printf("-- Lower sensor falling. Invalid state: %s.\n",
+                      door_state_to_string(state));
+      }
+      transition(door_state::OPENING);
+    }
+
+    if (pin == pin_lower && type == SpanButton::CLOSED) {
+      // Lower, Falling
+      if (state != door_state::OPENING && state != door_state::CLOSING &&
+          state != door_state::STOPPED) {
+        Serial.printf("-- Lower sensor rising. Invalid state: %s. \n",
+                      door_state_to_string(state));
+      }
+      transition(door_state::CLOSED);
+    }
+  }
+
+  void loop() override {
+    if (millis_timer != 0 && millis_since(millis_timer) > millis_timeout) {
       Serial.println("-- Timer ran out.");
       if (state != door_state::CLOSING && state != door_state::OPENING) {
-        Serial.printf("-- Timeout. Invalid state: %d.\n", state);
+        Serial.printf("-- Timeout. Invalid state: %s.\n",
+                      door_state_to_string(state));
       }
       transition(door_state::STOPPED);
     }
-
-    // Sensor change event. This happens when the door reaches or leaves either
-    // end of the track. It's not practically possible to have two transitions
-    // in one iteration, since it takes at least a few seconds to open or close
-    // a garage door. hence we only consider one transition here.
-    if (sensor_triggered && millis_since(millis_last) > millis_debounce) {
-      // Debouncing logic: it's been enough time since the last change, so it
-      // should be stable now.
-      uint8_t new_value_upper = digitalRead(pin_upper);
-      uint8_t new_value_lower = digitalRead(pin_lower);
-
-      if (value_upper == LOW && new_value_upper == HIGH) {
-        // Upper, Rising
-        if (state != door_state::OPEN) {
-          Serial.printf("-- Upper sensor falling. Invalid state: %d.\n", state);
-        }
-        transition(door_state::CLOSING);
-      } else if (value_upper == HIGH && new_value_upper == LOW) {
-        // Upper, Falling
-        if (state != door_state::OPENING && state != door_state::CLOSING &&
-            state != door_state::STOPPED) {
-          Serial.printf("-- Upper sensor rising. Invalid state: %d.\n", state);
-        }
-        transition(door_state::OPEN);
-      } else if (value_lower == LOW && new_value_lower == HIGH) {
-        // Lower, Rising
-        if (state != door_state::CLOSED) {
-          Serial.printf("-- Lower sensor falling. Invalid state: %d.\n", state);
-        }
-        transition(door_state::OPENING);
-      } else if (value_lower == HIGH && new_value_lower == LOW) {
-        // Lower, Falling
-        if (state != door_state::OPENING && state != door_state::CLOSING &&
-            state != door_state::STOPPED) {
-          Serial.printf("-- Lower sensor rising. Invalid state: %d. \n", state);
-        }
-        transition(door_state::CLOSED);
-      }
-
-      value_upper = new_value_upper;
-      value_lower = new_value_lower;
-      sensor_triggered = false;
-    }
   }
 };
-
-std::vector<DEV_GarageDoor *> DEV_GarageDoor::all_openers;
 
 void setup() {
   Serial.begin(115200);
