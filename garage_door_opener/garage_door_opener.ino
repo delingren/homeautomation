@@ -10,14 +10,14 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
   // not STOPPED is reached. We could start an operation while in the STOPPED
   // state, so this value should be a little longer than it takes to fully open
   // or close the door.
-  const unsigned long millis_timeout_start = 3000;
+  const unsigned long millis_timeout_start = 5000;
   // Timeout between when a sensor is triggered and reaching OPEN or CLOSED. My
   // garage door reverses the course when it hits an obstruction when closing.
   // So this value should be a little longer than it takes to make a round trip.
-  const unsigned long millis_timeout_finish = 5000;
+  const unsigned long millis_timeout_finish = 8000;
   // Time need to keep the relay on to trigger the motor. Half a second works
   // well for my garage door.
-  const unsigned long millis_relay = 500;
+  const unsigned long millis_relay = 1000;
 
   // These values are the same as the those defined in
   // GarageDoorOpener::CurrentDoorState. We would use that enum but it's
@@ -32,23 +32,19 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
 
   static const char *door_state_to_string(door_state state) {
     switch (state) {
-      case door_state::OPEN:
-        return "OPEN";
-      case door_state::CLOSED:
-        return "CLOSED";
-      case door_state::OPENING:
-        return "OPENING";
-      case door_state::CLOSING:
-        return "CLOSING";
-      case door_state::STOPPED:
-        return "STOPPED";
-      default:
-        return "Huh?";
+    case door_state::OPEN:
+      return "OPEN";
+    case door_state::CLOSED:
+      return "CLOSED";
+    case door_state::OPENING:
+      return "OPENING";
+    case door_state::CLOSING:
+      return "CLOSING";
+    case door_state::STOPPED:
+      return "STOPPED";
+    default:
+      return "Huh?";
     }
-  }
-
-  static const char *target_state_to_string(uint8_t state) {
-    return state == Characteristic::TargetDoorState::OPEN ? "OPEN" : "CLOSED";
   }
 
   Characteristic::CurrentDoorState current_state;
@@ -118,8 +114,8 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
   void trigger_relay() {
     if (state != door_state::OPEN && state != door_state::CLOSED &&
         state != door_state::STOPPED) {
-      Serial.print("-- Unexpected call to trigger_relay() in state %s.\n",
-                   door_state_to_string(state));
+      Serial.printf("-- Unexpected call to trigger_relay() in state %s.\n",
+                    door_state_to_string(state));
       return;
     }
     Serial.printf("-- Turning on the relay for %d milliseconds.\n",
@@ -154,14 +150,26 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     // for us to distinguish. In that case, we will let the human correct the
     // situation by pressing the switch again.
     if (old_state == door_state::CLOSING && new_state == door_state::OPEN) {
-      Serial.printf("-- Obstruction detected. Abandoning pending operation.\n");
+      Serial.printf("-- Obstruction detected.\n");
       obstruction.setVal(true);
-      pending_operation = false;
-      target_state.setVal(Characteristic::TargetDoorState::OPEN);
-      return;
+      if (pending_operation) {
+        Serial.printf("-- Abandoning pending operation.\n");
+        pending_operation = false;
+      }
+    } else {
+      obstruction.setVal(false);
     }
 
-    obstruction.setVal(false);
+    // If a user manually stops the door while it's opening and reverses it,
+    // we should think we were opening but have reached the CLOSED state. We
+    // should abandon the pending operation, assuming the user's intention was
+    // to close it.
+    if (old_state == door_state::OPENING && new_state == door_state::CLOSED) {
+      if (pending_operation) {
+        Serial.printf("-- Abandoning pending operation.\n");
+        pending_operation = false;
+      }
+    }
 
     if (new_state != door_state::STOPPED && millis_timer_start != 0) {
       // A start timer is running, expecting us to reach one of these states:
@@ -175,7 +183,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       // We expect to reach OPEN or CLOSED shortly, or STOPPED if the user has
       // intervenved.
       millis_timer_finish = millis();
-    } else {
+    } else if (millis_timer_finish != 0) {
       Serial.println("-- Stopping the finish timer.");
       // A finish timer is running, expecting us to reach one of the three
       // stable states (OPEN, CLOSED, STOPPTED). Now we can stop it.
@@ -183,37 +191,42 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     }
 
     if (pending_operation) {
-      // We are still trying to complete an operation requested by the Home app.
+      // We are trying to complete an operation requested by the Home app.
       uint8_t target = target_state.getVal();
       switch (new_state) {
-        case door_state::STOPPED:
-          // We are here because of a manual intervention. So we abandon the
-          // pending operation, assuming that's why the user intervened.
-          Serial.printf("-- Abandoning pending operation.\n");
+      case door_state::STOPPED:
+        // We are here because of a manual intervention. So we abandon the
+        // pending operation, assuming that's why the user intervened.
+        Serial.printf("-- Abandoning pending operation.\n");
+        pending_operation = false;
+        break;
+      case door_state::OPEN:
+        if (target == Characteristic::TargetDoorState::CLOSED) {
+          // At this point, the previous state must be STOPPED.
+          // Otherwise we would've abandoned the pending operation.
+          Serial.printf("-- Continuing pending operation: CLOSE.\n");
+          trigger_relay();
+        } else {
+          Serial.printf("-- Operation completed: OPEN.\n");
           pending_operation = false;
-          break;
-        case door_state::OPEN:
-          if (target == Characteristic::TargetDoorState::CLOSED) {
-            Serial.printf("-- Continuing pending CLOSE operation.\n");
-            trigger_relay();
-          } else {
-            Serial.printf("-- Completed OPEN operation.\n");
-            pending_operation = false;
-          }
-          break;
-        case door_state::CLOSED:
-          if (target == Characteristic::TargetDoorState::OPEN) {
-            Serial.printf("-- Continuing pending OPEN operation.\n");
-            trigger_relay();
-          } else {
-            Serial.printf("-- Completed CLOSE operation.\n");
-            pending_operation = false;
-          }
-          break;
+        }
+        break;
+      case door_state::CLOSED:
+        if (target == Characteristic::TargetDoorState::OPEN) {
+          // At this point, the previous state must be STOPPED.
+          // Otherwise, we would've abandonded the pending operation.
+          Serial.printf("-- Continuing pending operation: OPEN.\n");
+          trigger_relay();
+        } else {
+          Serial.printf("-- Operation completed: CLOSE.\n");
+          pending_operation = false;
+        }
+        break;
       }
     } else {
-      // If the door is being opened or closed manually, we need to set the
-      // target state so that the Home apps is not confused.
+      // If the door is being opened or closed manually, or an operation has
+      // been abandoned, we need to set the target state so that the Home app
+      // is not confused.
       if (new_state == door_state::OPENING || new_state == door_state::OPEN) {
         target_state.setVal(Characteristic::TargetDoorState::OPEN);
       }
@@ -225,45 +238,48 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
   }
 
   boolean update() override {
-    Serial.printf("-- %s operation requested.\n",
-                  target_state_to_string(target_state.getNewVal()));
+    Serial.printf("-- Operation requested: %s.\n",
+                  target_state.getNewVal() ==
+                          Characteristic::TargetDoorState::OPEN
+                      ? "OPEN"
+                      : "CLOSE");
     Serial.printf("-- Current state is %s.\n", door_state_to_string(state));
 
     uint8_t target = target_state.getNewVal();
 
     if (target == Characteristic::TargetDoorState::OPEN) {
       switch (state) {
-        case door_state::OPEN:
-        case door_state::OPENING:
-          Serial.printf("-- Noop.\n");
-          break;
-        case door_state::CLOSING:
-          // Do nothing for now, but once we have reached the CLOSED state,
-          // trigger the relay to open.
-          Serial.printf("-- Noop, but setting pending_operation.\n");
-          pending_operation = true;
-          break;
-        case door_state::CLOSED:
-        case door_state::STOPPED:
-          pending_operation = true;
-          trigger_relay();
-          break;
+      case door_state::OPEN:
+      case door_state::OPENING:
+        Serial.printf("-- Noop.\n");
+        break;
+      case door_state::CLOSING:
+        // Do nothing for now, but once we have reached the CLOSED state,
+        // trigger the relay to open.
+        Serial.printf("-- Noop, but setting pending_operation.\n");
+        pending_operation = true;
+        break;
+      case door_state::CLOSED:
+      case door_state::STOPPED:
+        pending_operation = true;
+        trigger_relay();
+        break;
       }
     } else {
       switch (state) {
-        case door_state::CLOSED:
-        case door_state::CLOSING:
-          Serial.printf("-- Noop.\n");
-          break;
-        case door_state::OPENING:
-          Serial.printf("-- Noop, but setting pending_operation.\n");
-          pending_operation = true;
-          break;
-        case door_state::OPEN:
-        case door_state::STOPPED:
-          pending_operation = true;
-          trigger_relay();
-          break;
+      case door_state::CLOSED:
+      case door_state::CLOSING:
+        Serial.printf("-- Noop.\n");
+        break;
+      case door_state::OPENING:
+        Serial.printf("-- Noop, but setting pending_operation.\n");
+        pending_operation = true;
+        break;
+      case door_state::OPEN:
+      case door_state::STOPPED:
+        pending_operation = true;
+        trigger_relay();
+        break;
       }
     }
 
@@ -288,8 +304,8 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
 
   // All empty cells are invalid. However, we always transition the the state
   // determined by the previous pin values and current ones, even if we are in
-  // an invalid state. It's the only way we can recover. But we report such
-  // errors.
+  // an invalid state. It's the only way we can recover. But we log such
+  // errors and abandon any pending operations.
 
   // Timeout event: when transitioning into OPENING or CLOSING, we start a
   // timer. The timer is stopped if we reach OPEN or CLOSED state. But once it
@@ -306,6 +322,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       if (state != door_state::OPEN) {
         Serial.printf("-- Upper sensor falling. Invalid state: %s.\n",
                       door_state_to_string(state));
+        pending_operation = false;
       }
       transition(door_state::CLOSING);
     }
@@ -316,6 +333,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
           state != door_state::STOPPED) {
         Serial.printf("-- Upper sensor rising. Invalid state: %s.\n",
                       door_state_to_string(state));
+        pending_operation = false;
       }
       transition(door_state::OPEN);
     }
@@ -325,6 +343,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       if (state != door_state::CLOSED) {
         Serial.printf("-- Lower sensor falling. Invalid state: %s.\n",
                       door_state_to_string(state));
+        pending_operation = false;
       }
       transition(door_state::OPENING);
     }
@@ -335,6 +354,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
           state != door_state::STOPPED) {
         Serial.printf("-- Lower sensor rising. Invalid state: %s.\n",
                       door_state_to_string(state));
+        pending_operation = false;
       }
       transition(door_state::CLOSED);
     }
@@ -348,6 +368,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       if (state != door_state::CLOSING && state != door_state::OPENING) {
         Serial.printf("-- Finish timer running out. Invalid state: %s.\n",
                       door_state_to_string(state));
+        pending_operation = false;
       }
       transition(door_state::STOPPED);
       return;
@@ -356,22 +377,30 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     if (millis_timer_start != 0 &&
         millis_since(millis_timer_start) > millis_timeout_start) {
       Serial.printf("-- Start timer ran out. The motor is malfunctioning.\n");
+      millis_timer_start = 0;
       // An operation started but has timed out. This indicates a possible motor
       // failure. We are not able to leave the current state without external
-      // intervention. So we should set the target state to match the current
-      // state. Otherwise, the Home app will be waiting indefinitely. The
-      // STOPPED state is considered as open by the Home app.
-      millis_timer_start = 0;
+      // intervention. So, we abandon the pending opeartion, and set the target
+      // state to match the current state. Otherwise, the Home app will be
+      // waiting indefinitely. The STOPPED state is considered as open by the
+      // Home app.
+      if (pending_operation) {
+        Serial.printf("-- Abandoning pending operation.\n");
+        pending_operation = false;
+      }
+
       switch (state) {
-        case door_state::CLOSED:
-          target_state.setVal(Characteristic::TargetDoorState::CLOSED);
-          break;
-        case door_state::OPEN:
-        case door_state::STOPPED:
-          target_state.setVal(Characteristic::TargetDoorState::OPEN);
-          break;
-        default:
-          Serial.printf("-- Invalid state: %s.\n", door_state_to_string(state));
+      case door_state::CLOSED:
+        target_state.setVal(Characteristic::TargetDoorState::CLOSED);
+        break;
+      case door_state::OPEN:
+      case door_state::STOPPED:
+        target_state.setVal(Characteristic::TargetDoorState::OPEN);
+        break;
+      default:
+        Serial.printf("-- Invalid state: %s.\n", door_state_to_string(state));
+        pending_operation = false;
+        break;
       }
     }
   }
@@ -387,7 +416,7 @@ void setup() {
   new Service::AccessoryInformation();
   new Characteristic::Identify();
   new Characteristic::Name("Garage Door");
-  new DEV_GarageDoor(23, 22, 13);
+  new DEV_GarageDoor(23, 22, 19);
 
   homeSpan.autoPoll();
 }

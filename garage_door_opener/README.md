@@ -134,7 +134,7 @@ The MCU and the relay
 ### Test cases
 These test cases are executed on a breadboard.
 
-#### Manual opening
+#### Open manually
 1. Start from CLOSED.
 1. Manually open lower sensor.
 1. Manually close upper sensor.
@@ -142,7 +142,15 @@ These test cases are executed on a breadboard.
 * Expected: 
   - tile: closed -> opening -> open.
 
-#### Manual opening with a timeout
+#### Open manually, close manually
+1. Start from CLOSED.
+1. Manually open lower sensor.
+1. Manually close lower sensor.
+
+* Expected: 
+  - tile: closed -> opening -> closed.
+
+#### Open manually, timeout, open manually
 1. Start from CLOSED.
 1. Manually open lower sensor.
 1. Wait for a timeout.
@@ -151,15 +159,7 @@ These test cases are executed on a breadboard.
 * Expected: 
   - tile: closed -> opening -> open -> open.
 
-#### Manual opening then closing
-1. Start from CLOSED.
-1. Manually open lower sensor.
-1. Manually close lower sensor.
-
-* Expected: 
-  - tile: closed -> opening -> closed.
-
-#### Manual opening, timeout then closing
+#### Open manually, timeout, close manually
 1. Start from CLOSED.
 1. Manually open lower sensor.
 2. Wait for a timeout.
@@ -168,7 +168,7 @@ These test cases are executed on a breadboard.
 * Expected: 
   - tile: closed -> opening -> open -> closed.
 
-#### Manual closing
+#### Close manually
 1. Start from OPEN.
 1. Manually open upper sensor.
 1. Manually close lower sensor.
@@ -176,16 +176,7 @@ These test cases are executed on a breadboard.
 * Expected:
   - tile: open -> closing -> closed.
 
-#### Manual closing with a timeout
-1. Start from OPEN.
-1. Manually open upper sensor.
-1. Wait for a timeout
-1. Manually close lower sensor.
-
-* Expected: 
-  - tile: open -> closing -> open -> closed
-
-#### Manual closing with obstruction
+#### Close manually, open manually
 1. Start from OPEN.
 1. Manually open upper sensor.
 1. Manually close upper sensor.
@@ -200,7 +191,43 @@ These test cases are executed on a breadboard.
   - relay: engaged and disengaged
   - tile: obstructed -> closing -> closed
 
-#### Opening in app
+#### Close manually, timeout, close manually
+1. Start from OPEN.
+1. Manually open upper sensor.
+1. Wait for a timeout
+1. Manually close lower sensor.
+
+* Expected: 
+  - tile: open -> closing -> open -> closed
+
+#### Manual closing, timeout then opening
+1. Start from OPEN.
+1. Manually open upper sensor.
+1. Wait for a timeout
+1. Manually close upper sensor.
+
+* Expected: 
+  - tile: open -> closing -> open -> open  
+
+
+#### Closing in app with obstruction
+1. Start from OPEN.
+1. Tap tile to close.
+1. Manually open upper sensor.
+1. Manually close upper sensor.
+
+* Expected: 
+  - relay: clicks
+  - tile: open -> closing -> obstructed
+
+1. Tap the tile to close.
+1. Manually close lower sensor.
+
+* Expected: 
+  - relay: clicks
+  - tile: obstructed -> closing -> closed
+
+#### Open in app
 1. Start from CLOSED.
 1. Tap on the tile to open.
 1. Manually open lower sensor.
@@ -210,7 +237,17 @@ These test cases are executed on a breadboard.
   - relay: engaged and disengaged
   - tile: closed -> opening -> open
 
-#### Opening in app with timeout
+#### Open in app then close manually
+1. Start from CLOSED.
+1. Tap on the tile to open.
+1. Manually open lower sensor.
+1. Manually close lower sensor.
+
+* Exptected:
+  - relay: clicks
+  - tile: closed -> opening -> closed
+
+#### Open in app, timeout, then open manually
 1. Start from CLOSED.
 1. Tap on the tile to open.
 1. Manually open lower sensor.
@@ -221,7 +258,7 @@ These test cases are executed on a breadboard.
   - relay: engaged and disengaged
   - tile: closed -> opening -> open -> open
 
-#### Opening in app with timeout then closing
+#### Open in app, timeout, then close manually
 1. Start from CLOSED.
 1. Tap on the tile to open.
 1. Manually open lower sensor.
@@ -229,38 +266,88 @@ These test cases are executed on a breadboard.
 1. Manually close lower sensor.
 
 * Expected:
-  - relay: engaged and disengaged
+  - relay: clicks
   - tile: closed -> opening -> open -> closed
 
-#### Closing in app
+#### Close in app
 1. Start from OPEN.
 1. Tap on the tile to close.
 1. Manually open upper sensor.
-1. Manually close lower sensor.
-
-#### Closing in app from STOPPED, 1
-1. Start from OPEN.
-1. Optionally, tap the tile to close.
-1. Manually open upper sensor.
-1. Wait for a timeout to reach STOPPED.
-1. Tap on the tile to close.
 1. Manually close lower sensor.
 
 * Expected:
-  - relay: engaged and disengaged after the tap(s)
-  - tile: open -> closing -> open -> closing -> closed
+  - relay: clicks
+  - tile: open -> closing -> closed
 
-#### Closing in app from STOPPED, 2
+#### Close from obstructed
+1. Start from OPEN.
+1. Tap on the tile to close
+1. Manually open upper sensor.
+1. Manually close upper sensor.
+1. Tap the tile to close.
+1. Manually close lower sensor.
+
+* Expected: 
+  - relay: clicks twice
+  - tile: open -> closing -> obstructed -> closing -> closed
+
+#### Open in app from STOPPED, 1
+1. Start from OPEN.
+1. Tap on the tile to close.
+1. Manually open upper sensor.
+1. Wait for a timeout to reach STOPPED.
+1. Tap on the tile to open.
+1. Manually close upper sensor.
+
+* Expected:
+  - relay: clicks twice
+  - tile: open -> closing -> open -> open
+
+#### Open in app from STOPPED, 2
+1. Start from OPEN.
+1. Tap on the tile to close.
+1. Manually open upper sensor.
+1. Wait for a timeout to reach STOPPED.
+1. Tap on the tile to open.
+1. Manually close lower sensor.
+1. Manually open lower sensor.
+1. Manually close upper sensor.
+
+* Expected:
+  - relay: clicks 3 times (after two taps, and once after reaching CLOSED)
+  - tile: open -> closing -> open -> closed -> opening -> open
+
+#### Close in app from STOPPED, 1
 1. Start from CLOSED.
-1. Optionally, tap the tile to open.
+1. Tap on the tile to open.
 1. Manually open lower sensor.
 1. Wait for a timeout to reach STOPPED.
 1. Tap on the tile to close.
 1. Manually close lower sensor.
 
 * Expected:
-  - relay: engaged and disengaged after the tap(s)
-  - tile: closed -> opening -> open -> closing -> closed
+  - relay: clicks twice
+  - tile: closed -> opening -> open -> closed
+
+#### Close in app from STOPPED, 1
+1. Start from CLOSED.
+1. Tap on the tile to open.
+1. Manually open lower sensor.
+1. Wait for a timeout to reach STOPPED.
+1. Tap on the tile to close.
+1. Manually close upper sensor.
+1. Manually open upper sensor.
+1. Manually close lower sensor.
+
+* Expected:
+  - relay: clicks 3 times (after two taps, and once after reaching OPEN)
+  - tile: closed -> opening -> open -> open -> closing -> closed
+
+
+-- WIP below
+
+
+
 
 #### Opening in app with motor failure
 1. Start from CLOSED.
