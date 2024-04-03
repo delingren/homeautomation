@@ -85,22 +85,26 @@ When the program starts, we check if the state is OPEN or CLOSED. If both U and 
 The way my garage door operates, while the door is being opened or closed, two things can happen.
 
 * A human presses the wall mount button or a remote and stops the door. 
-* The door hits an obstacle and reverses its direction while closing
+* The door hits an obstacle and reverses its direction (only applicable to closing).
 
 Therefore, we need to set a timeout after transitioning to OPENING or CLOSING states. After the timeout, we should transition to STOPPED state. Every time we transition to OPENING or CLOSING state, we start a timer. When the timer runs out, a timeout event is triggered. When we transition to OPEN, CLOSED, or STOPPED state, the timer stops.
 
-There have 4 events driven by the sensors and timeout.
+When we consider the operation requests from HomeKit, there is also another type of timeout. After the operation is requested, if we don't hear from either sensor in a bit, either the motor has failed or the relay didn't work. To distinguish them, we call this kind "start timeout", since we are waiting for the operation to start. The previous kind is referred to as "finish timeout", since we are waiting for the foor to reach a stable state.
 
-* U 1->0 (UF)
-* U 0->1 (UR)
-* L 1->0 (LF)
-* L 0->1 (LR)
-* Timeout (TO)
+A start timeout doesn't change the state of the statemachine, since literally no physical state has changed. But we need to take care to cancel any pending operation and reset the target state to get HomeKit to a stable state.
+
+So, in summary, as far as the statemachine goes, there have 4 events driven by the sensors and (finish) timeout.
+
+* Upper sensor 1->0 (UF)
+* Upper sensor 0->1 (UR)
+* Lower sensor 1->0 (LF)
+* Lower 0->1 (LR)
+* Finish timeout (FTO)
 
 Instead of drawing a state machine, I'm just listing all the transitions in the following table.
 
 ```
-        |   UR   |   UF   |   LR   |   LF   |   TO   | 
+        |   UR   |   UF   |   LR   |   LF   |  FTO   | 
 --------+--------+--------+--------+--------+--------+
 OPEN    |closing |        |        |        |        |
 CLOSED  |        |        |OPENING |        |        |
@@ -132,7 +136,7 @@ The MCU and the relay
   - Power cable slot
 
 ### Test cases
-These test cases are executed on a breadboard.
+Use switches to simulate the sensors and fully test all these scenarios before hooking up with the actual opener.
 
 #### Open manually
 1. Start from CLOSED.
@@ -329,7 +333,7 @@ These test cases are executed on a breadboard.
   - relay: clicks twice
   - tile: closed -> opening -> open -> closed
 
-#### Close in app from STOPPED, 1
+#### Close in app from STOPPED, 2
 1. Start from CLOSED.
 1. Tap on the tile to open.
 1. Manually open lower sensor.
@@ -343,13 +347,31 @@ These test cases are executed on a breadboard.
   - relay: clicks 3 times (after two taps, and once after reaching OPEN)
   - tile: closed -> opening -> open -> open -> closing -> closed
 
+#### Open in app from CLOSING
+1. Start from CLOSED.
+1. Manually open lower sensor.
+1. Tap on the tile to close.
+1. Manually close upper sensor.
+1. Manually open upper sensor.
+1. Manually close lower sensor.
 
--- WIP below
+* Expected:
+  - relay: clicks twice, once after the tap, again after reaching OPEN
+  - tile: closed -> opening -> closing -> closed
 
+#### Close in app from OPENING
+1. Start from OPEN.
+1. Manually open upper sensor.
+1. Tap the tile to open.
+1. Manually close lower sensor.
+1. Manually open lower sensor.
+1. Manually close upper sensor.
 
+* Expected:
+  - relay: clicks twice, ince after the tap, again after reaching CLOSED
+  - tile: open -> closing -> opening -> open
 
-
-#### Opening in app with motor failure
+#### Open in app from CLOSED, motor failure
 1. Start from CLOSED.
 1. Tap the tile to open.
 1. Wait for a start timeout.
@@ -358,15 +380,18 @@ These test cases are executed on a breadboard.
   - relay: clicks
   - tile: closed -> opening -> closed
 
-1. Tap the tile to open again.
-1. Manually open lower sensor.
-1. Manuall close upper sensor.
+#### Open in app from STOPPED, motor failure
+1. Start from OPEN.
+1. Manually open upper sensor.
+1. Wait for the timeout to reach STOPPED.
+1. Tap the tile to open.
+1. Wait for the start timeout.
 
 * Expected:
   - relay: clicks
-  - tile: closed -> opening -> open
+  - tile: open -> closing -> open
 
-#### Closing in app with motor failure
+#### Close in app from OPEN, motor failure
 1. Start from OPEN.
 1. Tap the tile to close.
 1. Wait for a start timeout.
@@ -375,37 +400,13 @@ These test cases are executed on a breadboard.
   - relay: clicks
   - tile: open -> closing -> open
 
+#### Close in app from STOPPED, motor failure
+1. Start from CLOSED.
+1. Manually open lower sensor.
+1. Wait for the timeout to reach STOPPED.
 1. Tap the tile to close.
-1. Manually open upper sensor.
-1. Manually close lower sensor.
+1. Wait for the start timeout.
 
-* Expected:
+* Expected
   - relay: clicks
-  - tile: open -> closing -> closed
-
-#### Opening in app from OPENING
-1. Start from OPENING
-1.
-* Expected: noop
-
-#### Opening in app from CLOSING
-1. Start from CLOSING
-1. 
-
-* Expected:
-  - relay: clicks after reaching CLOSED
-  - tile: closing -> closed -> opening -> open
-
-#### Closing in app from CLOSING
-1. Start from CLOSING
-1. Tap the tile to close
-
-* Expected: noop
-
-#### Closing in app from OPENING
-1. Start from OPENING
-1. Tap the tile to close
-
-* Expected:
-  - relay: clicks after reaching OPEN
-  - tile: opening -> open -> closing -> closed
+  - tile: closed -> opening -> open

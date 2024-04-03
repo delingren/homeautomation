@@ -81,24 +81,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     pinMode(pin_relay, OUTPUT);
     digitalWrite(pin_relay, LOW);
 
-    // Determine the initial state.
-    uint8_t value_upper = digitalRead(pin_upper);
-    uint8_t value_lower = digitalRead(pin_lower);
-
-    if (value_upper == LOW && value_lower == HIGH) {
-      state = door_state::OPEN;
-    } else if (value_upper == HIGH && value_lower == LOW) {
-      state = door_state::CLOSED;
-    } else {
-      // The door could be OPENING, CLOSING, or STOPPED. But there is no way we
-      // can tell. So we assume it's STOPPED. If it's indeed OPENING or CLOSING,
-      // it'll trigger a sensor change event (if successful) and we will be able
-      // to transition into the OPEN or CLOSED state. If unsuccessful, STOPPED
-      // will be the correct state.
-      state = door_state::STOPPED;
-    }
-    current_state.setVal(state);
-    Serial.printf("-- Initial state: %s.\n", door_state_to_string(state));
+    init();
   }
 
   ~DEV_GarageDoor() {
@@ -109,6 +92,47 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     if (toggle_lower != nullptr) {
       delete toggle_lower;
     }
+  }
+
+  void init() {
+    pending_operation = false;
+    millis_timer_start = 0;
+    millis_timer_finish = 0;
+
+    // Determine the initial state.
+    uint8_t value_upper = digitalRead(pin_upper);
+    uint8_t value_lower = digitalRead(pin_lower);
+
+    uint8_t target;
+    if (value_upper == LOW && value_lower == HIGH) {
+      state = door_state::OPEN;
+      target = Characteristic::TargetDoorState::OPEN;
+    } else if (value_upper == HIGH && value_lower == LOW) {
+      state = door_state::CLOSED;
+      target = Characteristic::TargetDoorState::CLOSED;
+    } else {
+      if (value_upper == LOW && value_lower == LOW) {
+        // This scenario shouldn't be possible. If we are here, the sensors
+        // must be malfunctioning.
+        Serial.print("-- Yo, fix your sensors. They are both closed.\n");
+      }
+      // The door could be OPENING, CLOSING, or STOPPED. But there is no way we
+      // can tell. So we assume it's STOPPED. If it's indeed OPENING or CLOSING,
+      // it'll trigger a sensor change event (if successful) and we will be able
+      // to transition into the OPEN or CLOSED state. If unsuccessful, STOPPED
+      // will be the correct state.
+      state = door_state::STOPPED;
+      // Pick a rather arbitrary state as the target state, so the behavior is
+      // at least determinstics. We choose CLOSED so that the Home app thinks we
+      // stopped while trying to close.
+      target = Characteristic::TargetDoorState::CLOSED;
+    }
+    current_state.setVal(state);
+    target_state.setVal(target);
+    Serial.printf("-- Initializing, current state: %s, target state: %s.\n",
+                  door_state_to_string(state),
+                  target == Characteristic::TargetDoorState::OPEN ? "OPEN"
+                                                                  : "CLOSED");
   }
 
   void trigger_relay() {
@@ -134,6 +158,165 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     return millis_now >= millis_then
                ? millis_now - millis_then
                : 0xFFFFFFFF - (millis_then - millis_now) + 1;
+  }
+
+  boolean update() override {
+    Serial.printf("-- Operation requested: %s.\n",
+                  target_state.getNewVal() ==
+                          Characteristic::TargetDoorState::OPEN
+                      ? "OPEN"
+                      : "CLOSE");
+    Serial.printf("-- Current state is %s.\n", door_state_to_string(state));
+
+    uint8_t target = target_state.getNewVal();
+
+    if (target == Characteristic::TargetDoorState::OPEN) {
+      switch (state) {
+      case door_state::OPEN:
+      case door_state::OPENING:
+        Serial.printf("-- Noop.\n");
+        break;
+      case door_state::CLOSING:
+        // Do nothing for now, but once we have reached the CLOSED state,
+        // trigger the relay to open.
+        Serial.printf("-- Noop, but setting pending_operation.\n");
+        pending_operation = true;
+        break;
+      case door_state::CLOSED:
+      case door_state::STOPPED:
+        pending_operation = true;
+        trigger_relay();
+        break;
+      }
+    } else {
+      switch (state) {
+      case door_state::CLOSED:
+      case door_state::CLOSING:
+        Serial.printf("-- Noop.\n");
+        break;
+      case door_state::OPENING:
+        Serial.printf("-- Noop, but setting pending_operation.\n");
+        pending_operation = true;
+        break;
+      case door_state::OPEN:
+      case door_state::STOPPED:
+        pending_operation = true;
+        trigger_relay();
+        break;
+      }
+    }
+
+    return true;
+  }
+
+  // State transitions. See README.md for more details.
+  // UR = Upper rising. Upper sensor is being closed.
+  // UF = Upper falling. Upper sensor is being opened.
+  // LR = Lower rising. Lower sensor is being closed.
+  // LF = Lower falling. Lower sensor is being opened.
+  // FTO = Finish timer runs out.
+
+  //         |   UR   |   UF   |   LR   |   LF   |  FTO   |
+  // --------+--------+--------+--------+--------+--------+
+  // OPEN    |CLOSING |        |        |        |        |
+  // CLOSED  |        |        |OPENING |        |        |
+  // OPENING |        |  OPEN  |        | CLOSED |STOPPED |
+  // CLOSING |        |  OPEN  |        | CLOSED |STOPPED |
+  // STOPPED |        |  OPEN  |        | CLOSED |        |
+  // --------+--------+--------+--------+--------+--------+
+
+  void button(int pin, int type) override {
+    // This function is called whenever either sensor changes state, which
+    // means the door has reached or left either end of the track.
+
+    if (pin == pin_upper && type == SpanButton::OPEN) {
+      // Upper, Rising
+      if (state != door_state::OPEN) {
+        Serial.printf(
+            "-- Upper sensor falling. Invalid state: %s. Resetting.\n",
+            door_state_to_string(state));
+        init();
+      }
+      transition(door_state::CLOSING);
+    }
+
+    if (pin == pin_upper && type == SpanButton::CLOSED) {
+      // Upper, Falling
+      if (state != door_state::OPENING && state != door_state::CLOSING &&
+          state != door_state::STOPPED) {
+        Serial.printf("-- Upper sensor rising. Invalid state: %s. Resetting.\n",
+                      door_state_to_string(state));
+        init();
+      }
+      transition(door_state::OPEN);
+    }
+
+    if (pin == pin_lower && type == SpanButton::OPEN) {
+      // Lower, Rising
+      if (state != door_state::CLOSED) {
+        Serial.printf(
+            "-- Lower sensor falling. Invalid state: %s. Resetting.\n",
+            door_state_to_string(state));
+        init();
+      }
+      transition(door_state::OPENING);
+    }
+
+    if (pin == pin_lower && type == SpanButton::CLOSED) {
+      // Lower, Falling
+      if (state != door_state::OPENING && state != door_state::CLOSING &&
+          state != door_state::STOPPED) {
+        Serial.printf("-- Lower sensor rising. Invalid state: %s. Resetting.\n",
+                      door_state_to_string(state));
+        init();
+      }
+      transition(door_state::CLOSED);
+    }
+  }
+
+  void loop() override {
+    if (millis_timer_finish != 0 &&
+        millis_since(millis_timer_finish) > millis_timeout_finish) {
+      // We were opening or closing. But the timer has run out, probably due to
+      // user intervention.
+      if (state != door_state::CLOSING && state != door_state::OPENING) {
+        Serial.printf("-- Finish timer running out. Invalid state: %s.\n",
+                      door_state_to_string(state));
+        pending_operation = false;
+      }
+      transition(door_state::STOPPED);
+      return;
+    }
+
+    if (millis_timer_start != 0 &&
+        millis_since(millis_timer_start) > millis_timeout_start) {
+      Serial.printf("-- Start timer ran out. The motor is malfunctioning.\n");
+      millis_timer_start = 0;
+      // An operation started but has timed out. This indicates a possible motor
+      // failure. We are not able to leave the current state without external
+      // intervention. So, we abandon the pending opeartion, and set the target
+      // state to match the current state. Otherwise, the Home app will be
+      // waiting indefinitely. The STOPPED state is considered as open by the
+      // Home app.
+      if (pending_operation) {
+        Serial.printf("-- Abandoning pending operation.\n");
+        pending_operation = false;
+      }
+
+      switch (state) {
+      case door_state::CLOSED:
+        target_state.setVal(Characteristic::TargetDoorState::CLOSED);
+        break;
+      case door_state::OPEN:
+      case door_state::STOPPED:
+        target_state.setVal(Characteristic::TargetDoorState::OPEN);
+        break;
+      default:
+        Serial.printf("-- Invalid state: %s.\n", door_state_to_string(state));
+        pending_operation = false;
+        break;
+      }
+    }
   }
 
   void transition(door_state new_state) {
@@ -234,174 +417,6 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
         target_state.setVal(Characteristic::TargetDoorState::CLOSED);
       }
       return;
-    }
-  }
-
-  boolean update() override {
-    Serial.printf("-- Operation requested: %s.\n",
-                  target_state.getNewVal() ==
-                          Characteristic::TargetDoorState::OPEN
-                      ? "OPEN"
-                      : "CLOSE");
-    Serial.printf("-- Current state is %s.\n", door_state_to_string(state));
-
-    uint8_t target = target_state.getNewVal();
-
-    if (target == Characteristic::TargetDoorState::OPEN) {
-      switch (state) {
-      case door_state::OPEN:
-      case door_state::OPENING:
-        Serial.printf("-- Noop.\n");
-        break;
-      case door_state::CLOSING:
-        // Do nothing for now, but once we have reached the CLOSED state,
-        // trigger the relay to open.
-        Serial.printf("-- Noop, but setting pending_operation.\n");
-        pending_operation = true;
-        break;
-      case door_state::CLOSED:
-      case door_state::STOPPED:
-        pending_operation = true;
-        trigger_relay();
-        break;
-      }
-    } else {
-      switch (state) {
-      case door_state::CLOSED:
-      case door_state::CLOSING:
-        Serial.printf("-- Noop.\n");
-        break;
-      case door_state::OPENING:
-        Serial.printf("-- Noop, but setting pending_operation.\n");
-        pending_operation = true;
-        break;
-      case door_state::OPEN:
-      case door_state::STOPPED:
-        pending_operation = true;
-        trigger_relay();
-        break;
-      }
-    }
-
-    return true;
-  }
-
-  // State transitions.
-  // UR = Upper rising. Upper sensor is being closed.
-  // UF = Upper falling. Upper sensor is being opened.
-  // LR = Lower rising. Lower sensor is being closed.
-  // LF = Lower falling. Lower sensor is being opened.
-  // FTO = Finish timer runs out.
-  // STO = Start timer runs out. This indicates a possible motor failure.
-  //         |   UR   |   UF   |   LR   |   LF   |  FTO   |  STO   |
-  // --------+--------+--------+--------+--------+--------+--------+
-  // OPEN    |CLOSING |        |        |        |        |  OPEN  |
-  // CLOSED  |        |        |OPENING |        |        | CLOSED |
-  // OPENING |        |  OPEN  |        | CLOSED |STOPPED |        |
-  // CLOSING |        |  OPEN  |        | CLOSED |STOPPED |        |
-  // STOPPED |        |  OPEN  |        | CLOSED |        |STOPPED |
-  // --------+--------+--------+--------+--------+--------+--------+
-
-  // All empty cells are invalid. However, we always transition the the state
-  // determined by the previous pin values and current ones, even if we are in
-  // an invalid state. It's the only way we can recover. But we log such
-  // errors and abandon any pending operations.
-
-  // Timeout event: when transitioning into OPENING or CLOSING, we start a
-  // timer. The timer is stopped if we reach OPEN or CLOSED state. But once it
-  // runs out, we consider the door in the STOPPED state. This could be caused
-  // by manual intervention with a remote or wall switch, a power outage, a
-  // motor failure, or a number of other reasons.
-
-  void button(int pin, int type) override {
-    // This function is called whenever either sensor changes state, which
-    // means the door has reached or left either end of the track.
-
-    if (pin == pin_upper && type == SpanButton::OPEN) {
-      // Upper, Rising
-      if (state != door_state::OPEN) {
-        Serial.printf("-- Upper sensor falling. Invalid state: %s.\n",
-                      door_state_to_string(state));
-        pending_operation = false;
-      }
-      transition(door_state::CLOSING);
-    }
-
-    if (pin == pin_upper && type == SpanButton::CLOSED) {
-      // Upper, Falling
-      if (state != door_state::OPENING && state != door_state::CLOSING &&
-          state != door_state::STOPPED) {
-        Serial.printf("-- Upper sensor rising. Invalid state: %s.\n",
-                      door_state_to_string(state));
-        pending_operation = false;
-      }
-      transition(door_state::OPEN);
-    }
-
-    if (pin == pin_lower && type == SpanButton::OPEN) {
-      // Lower, Rising
-      if (state != door_state::CLOSED) {
-        Serial.printf("-- Lower sensor falling. Invalid state: %s.\n",
-                      door_state_to_string(state));
-        pending_operation = false;
-      }
-      transition(door_state::OPENING);
-    }
-
-    if (pin == pin_lower && type == SpanButton::CLOSED) {
-      // Lower, Falling
-      if (state != door_state::OPENING && state != door_state::CLOSING &&
-          state != door_state::STOPPED) {
-        Serial.printf("-- Lower sensor rising. Invalid state: %s.\n",
-                      door_state_to_string(state));
-        pending_operation = false;
-      }
-      transition(door_state::CLOSED);
-    }
-  }
-
-  void loop() override {
-    if (millis_timer_finish != 0 &&
-        millis_since(millis_timer_finish) > millis_timeout_finish) {
-      // We were opening or closing. But the timer has run out, probably due to
-      // user intervention.
-      if (state != door_state::CLOSING && state != door_state::OPENING) {
-        Serial.printf("-- Finish timer running out. Invalid state: %s.\n",
-                      door_state_to_string(state));
-        pending_operation = false;
-      }
-      transition(door_state::STOPPED);
-      return;
-    }
-
-    if (millis_timer_start != 0 &&
-        millis_since(millis_timer_start) > millis_timeout_start) {
-      Serial.printf("-- Start timer ran out. The motor is malfunctioning.\n");
-      millis_timer_start = 0;
-      // An operation started but has timed out. This indicates a possible motor
-      // failure. We are not able to leave the current state without external
-      // intervention. So, we abandon the pending opeartion, and set the target
-      // state to match the current state. Otherwise, the Home app will be
-      // waiting indefinitely. The STOPPED state is considered as open by the
-      // Home app.
-      if (pending_operation) {
-        Serial.printf("-- Abandoning pending operation.\n");
-        pending_operation = false;
-      }
-
-      switch (state) {
-      case door_state::CLOSED:
-        target_state.setVal(Characteristic::TargetDoorState::CLOSED);
-        break;
-      case door_state::OPEN:
-      case door_state::STOPPED:
-        target_state.setVal(Characteristic::TargetDoorState::OPEN);
-        break;
-      default:
-        Serial.printf("-- Invalid state: %s.\n", door_state_to_string(state));
-        pending_operation = false;
-        break;
-      }
     }
   }
 };
