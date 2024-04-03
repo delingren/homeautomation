@@ -204,7 +204,7 @@ Use switches to simulate the sensors and fully test all these scenarios before h
 * Expected: 
   - tile: open -> closing -> open -> closed
 
-#### Manual closing, timeout then opening
+#### Close manually, timeout, open manually
 1. Start from OPEN.
 1. Manually open upper sensor.
 1. Wait for a timeout
@@ -214,7 +214,7 @@ Use switches to simulate the sensors and fully test all these scenarios before h
   - tile: open -> closing -> open -> open  
 
 
-#### Closing in app with obstruction
+#### Close in app with obstruction
 1. Start from OPEN.
 1. Tap tile to close.
 1. Manually open upper sensor.
@@ -241,7 +241,7 @@ Use switches to simulate the sensors and fully test all these scenarios before h
   - relay: engaged and disengaged
   - tile: closed -> opening -> open
 
-#### Open in app then close manually
+#### Open in app, close manually
 1. Start from CLOSED.
 1. Tap on the tile to open.
 1. Manually open lower sensor.
@@ -251,7 +251,7 @@ Use switches to simulate the sensors and fully test all these scenarios before h
   - relay: clicks
   - tile: closed -> opening -> closed
 
-#### Open in app, timeout, then open manually
+#### Open in app, timeout, open manually
 1. Start from CLOSED.
 1. Tap on the tile to open.
 1. Manually open lower sensor.
@@ -262,7 +262,7 @@ Use switches to simulate the sensors and fully test all these scenarios before h
   - relay: engaged and disengaged
   - tile: closed -> opening -> open -> open
 
-#### Open in app, timeout, then close manually
+#### Open in app, timeout, close manually
 1. Start from CLOSED.
 1. Tap on the tile to open.
 1. Manually open lower sensor.
@@ -282,18 +282,6 @@ Use switches to simulate the sensors and fully test all these scenarios before h
 * Expected:
   - relay: clicks
   - tile: open -> closing -> closed
-
-#### Close from obstructed
-1. Start from OPEN.
-1. Tap on the tile to close
-1. Manually open upper sensor.
-1. Manually close upper sensor.
-1. Tap the tile to close.
-1. Manually close lower sensor.
-
-* Expected: 
-  - relay: clicks twice
-  - tile: open -> closing -> obstructed -> closing -> closed
 
 #### Open in app from STOPPED, 1
 1. Start from OPEN.
