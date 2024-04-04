@@ -2,7 +2,7 @@
 
 ## Objective
 
-My house has a dumb garage door opener. And I wanted to integrate it with Apple's Home app so that I can monitor its status and operate it remotely. And I want to DIY. So here's the design of the control unit.
+My house has a dumb garage door opener. And I wanted to integrate it with Apple's HomeKit so that I can monitor its status and operate it remotely. And I want to DIY. So here's the design of the control unit.
 
 ## Mechanics and hardware
 
@@ -17,8 +17,24 @@ Also, when it's closing and it detects an obstruction, it reverses the direction
 
 Two limit switches are installed on the track. One for the open position (upper) and one for the closed position (lower). When the carriage hits a limit switch, the opener stops the motor. The limit switches are normally open. One of the leads is the ground. The other one appears to carry a +7.8V DC voltage.
 
-### Microcontroller
+### List of components
+* Microcontroller x 1
+* 5V relay x 1
+* 1N4007 diode x 2
+* LED x 3 (red, green, and blue)
+* 27Ω resistors x 3
+* 1.5kΩ resistor x 1
+* Pushbutton x 2
+* Solderable breadboard x 1
+* IPEX-1 to RP-SMA adapter x 1
+* RP-SMA 2.4 GHz antenna x 1
+* 5-pin M12 connector x 1 pair
+* Wires
+* Pin headers
+* USB-C breakout board
+* Project enclosure
 
+### Microcontroller
 The brain of the project is an ESP32-WROOM-32UE MCU. I am using this MCU for the following reasons:
 
 * It has built-in WiFi capability.
@@ -29,29 +45,27 @@ The brain of the project is an ESP32-WROOM-32UE MCU. I am using this MCU for the
 Pinout:  
 ![pinout](esp32-38pin.png)
 
-To operate the door, I simply use a relay to simulate a button press. The relay is controled with a GPIO pin.
-
 ### Relay  
-I am using this [5v Relay Module](https://www.amazon.com/dp/B00VRUAHLE). But any 5V DC relay with one normally open channel will do.
+To operate the door, I simply use a relay to simulate a button press. The relay is controled with a GPIO pin. I am using this [5v Relay Module](https://www.amazon.com/dp/B00VRUAHLE). But any 5V DC relay with one normally open channel will do. I am using a 1.5K resistor to pull down the input of the relay to prevent accidental triggering while the microcontroller is booting, before I have a chance to write it LOW.
 
 ### Sensors  
 For detecting the state of the door, I am piggybacking on the existing limit switches, instead of using my own sensors. The MCU and the opener share the ground. The GPIO pin is connected to the non-ground wire of the limit switch via a diode. When the siwtch is open, the diode prevents the 7.8v from backflowing to the GPIO. Essentially, the pin is free floating. So, it should be configured as a pullup input pin. When the switch closes, the GPIO is shorted to the ground. In practice, I found that there is a ~0.7v voltage drop on the diodes I'm using (1N4007, which is technically a rectifying diode, but I happened to have a whole lot). But that's low enough that the GPIO would still read low.
 
-Ideally, one would want to complately separate the two units. But I'm not too worried since an ESP32 is extremely cheap. And I don't want to deal with the hassle of installing two extra mechanical or magnetic switches and running the wires.
-
-Alternative: I could also use two [reed switches](https://www.amazon.com/gp/product/B0735BP1K4/) and a magnet on the carriage.
+Ideally, one would want to complately separate the two units. But I'm not too worried since an ESP32 is extremely cheap. And I don't want to deal with the hassle of installing two extra mechanical or [reed switches](https://www.amazon.com/gp/product/B0735BP1K4/) and running the wires.
 
 ### Indicators
-To make it easy to visualize the status of the switches, I am using two LEDs, one red and one green, tied to the limit switches. When a switch is closed, the corresponding LED lights up. The anode is connected to +5v and the cathode is connected to the GPIO pin. I'm using the +5v instead of the +3.3v due to that 0.7v drop on the 1N4007, which would reduce 3.3 to ~2.6, a bit low for the LEDs I have on hand. One caveat here is that the +5v is not regulated on the board. So there's a risk of frying the LEDs even with a small increase of voltage. But I using a quality iPhone USB power adapter, so it shouldn't be a problem.
+To make it easy to visualize the status of the switches, I am using two LEDs, one red and one green, tied to the limit switches. When a switch is closed, the corresponding LED lights up. The anode is connected to +5v and the cathode is connected to the GPIO pin. I'm using the +5v instead of the +3.3v due to that 0.7v drop on the 1N4007, which would reduce 3.3 to ~2.6, a bit low for the LEDs I have on hand. One caveat here is that the +5v is not regulated on the board. So there's a risk of frying the LEDs if that voltage goes too high. But I using a quality iPhone USB power adapter, so it shouldn't be a big problem.
 
-Also, interestingly, in practice, I am only getting ~4.6v from the +5v pin when powered through the USB port. I thought it was directed connected to the Vcc of the USB port? Oh well. The remaining 3.9v is good enough for the LEDs and I'm using very small current limiting resistors (27 Ohm) here.
+Also, interestingly, in practice, I am only getting ~4.6v from the +5v pin when powered through the USB port. I thought it was directed connected to the Vcc of the USB port? Oh well. The remaining 3.9v (4.6 minus the drop on the diode) is good enough for the LEDs, whose voltage drop is ~3v and I'm using very small current limiting resistors (27 Ω) here.
 
 ### Misc
-- Status LED. Optionally, HomeSpan uses an LED to indicate its status. I am using a blue LED for this purpose.
+- Status LED. Optionally, HomeSpan uses an LED to indicate its status. I am using a blue one for this purpose.
 - Control button. You can also interact with HomeSpan with a pushbutton.
 - Reset button. I am also using a pushbutton for resetting the devices, which is a bit easier than disconnecting the power supply.
+- Pinheaders. I soldered pinheaders to the Rx, Tx, Vcc, and ground pins of the ESP32 so that I can connect it to a serial monitor for debugging if needed. It's easier than connecting to the micro USB port once the board is inside the enclosure.
 - Antenna & U/FL to PR-SMA adapter. Since this device is running in the garage, where the WiFi reception isn't the strongest, I am using a board with an external antenna connector. 
 - USB C breakout pad. My ESP32 dev board comes with a micro USB port and I want to power it with a USB C plug. What's more, I don't want the layout to be constrained by the position of the USB port. Therefore I'm using a USB breakout board to interface with the outside. 
+- M12 connectors. Other than power, the unit has 4 wires connecting to the garage door opener: ground, relay, and 2 limit switches. To make things tight and neat, I'm using a pair of M21 connectors.
 - PCB. I am not well versed in designing PCB boards. And it's too much hassle to manufacture just one board. So I'm using a [solderable breadboard](https://www.amazon.com/EPLZON-Solderable-Breadboard-Gold-Plated-Electronics/dp/B0BP28GYTV) like this:  
 ![Solderable Breadboard](solderable_breadboard.jpg)
 
@@ -59,16 +73,12 @@ Also, interestingly, in practice, I am only getting ~4.6v from the +5v pin when 
 ![Schematic](schematic.png)
 
 ## Software
-
-### Development settings  
-* Arduino IDE
-* HomeSpan Library
+I'm using Arduino framework and [HomeSpan Library](https://github.com/HomeSpan/HomeSpan) for this project. I chose Arduino over ESP-IDF because of the simplicity.
 
 ### Design
-
 There are two relatively independent components:
 * State determination (detecting the current state of the door)
-* Operations (opening and closing the door)
+* Operations (opening and closing the door), coming from the HomeKit
 
 Since the door can be manually closed and opened, we should not use the operations to change the state. Rather, the state should be purely determined by the sensors. Let's call the upper sensor U and the lower sensor L. U is low if the door is closed. L is low if the door is closed.
 
@@ -84,7 +94,7 @@ When the program starts, we check if the state is OPEN or CLOSED. If both U and 
 
 The way my garage door operates, while the door is being opened or closed, two things can happen.
 
-* A human presses the wall mount button or a remote and stops the door. 
+* A human presses the wall mount switch or a remote and stops the door. 
 * The door hits an obstacle and reverses its direction (only applicable to closing).
 
 Therefore, we need to set a timeout after transitioning to OPENING or CLOSING states. After the timeout, we should transition to STOPPED state. Every time we transition to OPENING or CLOSING state, we start a timer. When the timer runs out, a timeout event is triggered. When we transition to OPEN, CLOSED, or STOPPED state, the timer stops.
@@ -98,7 +108,7 @@ So, in summary, as far as the statemachine goes, there have 4 events driven by t
 * Upper sensor 1->0 (UF)
 * Upper sensor 0->1 (UR)
 * Lower sensor 1->0 (LF)
-* Lower 0->1 (LR)
+* Lower sensor 0->1 (LR)
 * Finish timeout (FTO)
 
 Instead of drawing a state machine, I'm just listing all the transitions in the following table.
@@ -114,10 +124,10 @@ STOPPED |        |  OPEN  |        | CLOSED |        |
 --------+--------+--------+--------+--------+--------+
 ```
 
-All empty cells should be invalid transitions, as far as our unit is concerned. Some are due to lack of information. E.g. the door could transition from STOPPED to both OPENING or CLOSING. But since such operations don't go through our unit, we have no way to detect. So we stay in STOPPED until the opening or closing finishes and triggers a transition to OPEN or CLOSED.
+All empty cells should be invalid transitions, as far as our unit is concerned. Some are due to lack of information. E.g. the door could transition from STOPPED to both OPENING or CLOSING. But since such events don't go through our unit, we have no way to detect. So we stay in STOPPED until the opening or closing finishes and triggers a transition to OPEN or CLOSED.
 
 ### Prototyping and debugging
-I used a dev board with a PCB antenna for prototyping. Interestingly, when inserted into a breadboard, it does not connect to the WiFi, probably due to shielding of the metal in the breadboard. This is another reason I decided to get a board with an external antenna for the final product. This made prototyping difficult because I can't use the breadboard. So, here's the prototype I built:
+I use a dev board with a PCB antenna for prototyping. Interestingly, when inserted into a breadboard, it does not connect to the WiFi, probably due to shielding of the metal in the breadboard. This made prototyping difficult because I can't use the breadboard. So, here's the prototype I built:
 
 ![prototype](IMG_0917.jpeg)
 
@@ -132,11 +142,11 @@ The MCU and the relay
   - Control button
   - Status LED
   - Antenna connector (RP-SMA)
-  - M16 connector (5 pins: GND, upper sensor, lower sensor, 2 relay outputs)
-  - Power cable slot
+  - M12 connector (4 pins: GND, upper sensor, lower sensor, relay)
+  - USB-C breakout board
 
 ### Test cases
-Use switches to simulate the sensors and fully test all these scenarios before hooking up with the actual opener.
+To minimize trouble shooting in production, I use switches to simulate the sensors and fully test all these scenarios before hooking up with the actual opener.
 
 #### Open manually
 1. Start from CLOSED.
