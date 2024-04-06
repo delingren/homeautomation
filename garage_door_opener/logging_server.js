@@ -1,8 +1,11 @@
-const {createServer} = require('node:http');
-const {appendFile} = require('node:fs');
+const {createServer} = require('http');
+const {appendFile, existsSync, renameSync} = require('fs');
+const {exec} = require('child_process');
 
 const hostname = 'localhost';
 const port = 3000;
+const basePath = '/var/lib/httplog/';
+const lineLimit = 100;
 
 const server = createServer((request, response) => {
   var error = null;
@@ -11,30 +14,44 @@ const server = createServer((request, response) => {
   if (request.method == 'POST') {
     request.on('data', function(data) {
       const entry = JSON.parse(data);
-      const remoteIp = request.socket.remoteAddress;
-      const channelName = entry.channel;
+      const ip = request.socket.remoteAddress;
 
+      const time = entry.time;
+      const channel = entry.channel;
+      const message = entry.message;
 
-      console.log(entry.channel);
-      console.log(entry.message);
-      console.log(request.socket.remoteAddress);
-
-
-      if (!isValidChannelName(channelName)) {
-        error = 'Invalid channel name.';
+      if (!channel || !isValidChannelName(channel)) {
+        error = 'Invalid or empty channel name.';
         statusCode = 400;
         return;
       }
 
-      const fileName = remoteIp + '.' + channelName + '.log';
+      if (!message) {
+        error = 'Empty message.';
+        statusCode = 400;
+        return;
+      }
 
-      appendFile(fileName, entry.message + '\n', err => {
+      if (!time || !isValidTime(time)) {
+        error = 'Invalid ISO 8601 or empty time.'
+        statusCode = 400;
+        return;
+      }
+
+      const fileName = basePath + ip + '.' + channel + '.log';
+      appendFile(fileName, time + ',' + message + '\n', 'utf8', err => {
         if (err) {
-          console.error(err);
-          error = err;
-          statusCode = 500;
+          console.log(
+              'Failed to append entry to ' + fileName + '. Error: ' + err);
         } else {
-          console.log('Log appened to test.log');
+          exec('/usr/bin/wc -l < ' + fileName, function(error, stdout, stderr) {
+            const lines = stdout;
+            if (lines >= lineLimit) {
+              console.log('Line limit reached. Rolling over.');
+              rollOver(fileName);
+            }
+          });
+          console.log('Successfully appended entry to ' + fileName);
         }
       });
     });
@@ -45,7 +62,7 @@ const server = createServer((request, response) => {
       if (error) {
         response.end(error + '\n');
       } else {
-        response.end('Message logged.\n');
+        response.end('Message queued.\n');
       }
     });
   } else {
@@ -62,3 +79,29 @@ server.listen(port, hostname, () => {
 function isValidChannelName(str) {
   return str.length > 0 && str.match(/^[\w-\.]+$/);
 };
+
+function isValidTime(str) {
+  // Validate against ISO 8601.
+  const parsed = new Date(Date.parse(str));
+  try {
+    parsed.toISOString();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function rollOver(fileName) {
+  const baseName = fileName.substring(0, fileName.length - 4);
+  console.log('basename: ' + baseName + ' ...');
+  var n = 0;
+  var newFileName;
+  do {
+    newFileName = baseName + '.' + n + '.log';
+    if (!existsSync(newFileName)) {
+      break;
+    }
+    n = n + 1;
+  } while (true);
+  renameSync(fileName, newFileName);
+}

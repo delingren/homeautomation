@@ -135,20 +135,10 @@ The two rocker switches simulate the limit switches. The two pushbuttons were ha
 
 To debug the final product where the USB port on the ESP is hard to reach, I use a USB to UART CP2102 adapter. Connect 5v, GND, Rx and Tx pins. To upload a sketch, you need to press and bold boot, then press and release reset. After uploading the sketch, you'll need to manually reset.
 
-## Assembly and installation
-The MCU and the relay
-* Enclosure
-  - Rest button
-  - Control button
-  - Status LED
-  - Antenna connector (RP-SMA)
-  - M12 connector (4 pins: GND, upper sensor, lower sensor, relay)
-  - USB-C breakout board
-
-### Test cases
+## Test cases
 To minimize trouble shooting in production, I use switches to simulate the sensors and fully test all these scenarios before hooking up with the actual opener.
 
-#### Open manually
+### Open manually
 1. Start from CLOSED.
 1. Manually open lower sensor.
 1. Manually close upper sensor.
@@ -408,3 +398,58 @@ To minimize trouble shooting in production, I use switches to simulate the senso
 * Expected
   - relay: clicks
   - tile: closed -> opening -> open
+
+## Logging
+To help with diagnostics, I am logging messages to a remote server. The server is running on my home LAN on an Ubuntu machine. I am planning to use it for other projects as well.
+
+The service is very simple, it accepts requests over http post requests.
+
+### Client
+Posts over http with the following info in json format
+1. channel name (containing only alphanumericals, `_`, `-`, and `.`)
+1. time stamp (ISO 8601 format)
+1. message (string, properly escaped for json)
+
+E.g. 
+
+```
+{
+  "channel":"garage",
+  "message":"hello world",
+  "time":"2024-04-06T19:20:30+08:00"
+}
+```
+
+To use WiFiClient on ESP32, follow the [example](https://github.com/espressif/arduino-esp32/tree/master/libraries/WiFi/examples/WiFiClient)
+
+### Server
+Saves entries in `/var/lib/httplog/$ip.$channel.log`, one line for each entry, with the the time stamp and the message, separated by a `,`. Note that I am not checking if the message itself contains a new line. If it does, it'll mess up with the format. But this is for my personal usage.
+
+To test the service:
+
+```
+curl -X POST -H "Content-Type: application/json" -d '{"channel":"garage","message":"hello world","time":"2024-04-06T19:20:30+08:00"}' http://localhost:3000/
+```
+
+### Startup
+I am using [pm2](https://pm2.keymetrics.io/docs/usage/quick-start/) to run the service as a daemon upon booting.
+
+- Create a dedicated user `httplog`
+- Create a folder to store the logs `/var/lig/httplog`
+- Deploy the script to `/home/httplog/`
+- Set up pm2 to run as part of startup script:
+  ```sudo env PATH=$PATH:/usr/bin /usr/local/lib/node_modules/pm2/bin/pm2 startup systemd -u httplog --hp /home/httplog/```
+- Switch to the new user: `sudo -u httplog bash` 
+- Launch it with pm2: `pm2 logging_server.js`
+- Save the list: `pm2 save`
+
+
+## Final assembly and installation
+The MCU and the relay
+* Enclosure
+  - Rest button
+  - Control button
+  - Status LED
+  - Antenna connector (RP-SMA)
+  - M12 connector (4 pins: GND, upper sensor, lower sensor, relay)
+  - USB-C breakout board
