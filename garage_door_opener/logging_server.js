@@ -2,7 +2,7 @@ const {createServer} = require('http');
 const {appendFile, existsSync, renameSync} = require('fs');
 const {exec} = require('child_process');
 
-const hostname = 'localhost';
+const host = '0.0.0.0';
 const port = 3000;
 const basePath = '/var/lib/httplog/';
 const lineLimit = 100;
@@ -72,9 +72,7 @@ const server = createServer((request, response) => {
   }
 });
 
-server.listen(port, hostname, () => {
-  console.log(`Server running at http://${hostname}:${port}/`);
-});
+server.listen(port, host);
 
 function isValidChannelName(str) {
   return str.length > 0 && str.match(/^[\w-\.]+$/);
