@@ -16,7 +16,7 @@ const server = createServer((request, response) => {
       const entry = JSON.parse(data);
       const ip = request.socket.remoteAddress;
 
-      const time = entry.time;
+      const date = (new Date()).toISOString();
       const channel = entry.channel;
       const message = entry.message;
 
@@ -32,14 +32,8 @@ const server = createServer((request, response) => {
         return;
       }
 
-      if (!time || !isValidTime(time)) {
-        error = 'Invalid ISO 8601 or empty time.'
-        statusCode = 400;
-        return;
-      }
-
       const fileName = basePath + ip + '.' + channel + '.log';
-      appendFile(fileName, time + ',' + message + '\n', 'utf8', err => {
+      appendFile(fileName, date + ',' + message + '\n', 'utf8', err => {
         if (err) {
           console.log(
               'Failed to append entry to ' + fileName + '. Error: ' + err);
@@ -77,17 +71,6 @@ server.listen(port, host);
 function isValidChannelName(str) {
   return str.length > 0 && str.match(/^[\w-\.]+$/);
 };
-
-function isValidTime(str) {
-  // Validate against ISO 8601.
-  const parsed = new Date(Date.parse(str));
-  try {
-    parsed.toISOString();
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
 
 function rollOver(fileName) {
   const baseName = fileName.substring(0, fileName.length - 4);
