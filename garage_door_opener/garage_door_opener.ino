@@ -487,8 +487,8 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
 };
 
 void setup() {
-  // Serial.begin(115200);
-
+  Serial.begin(115200);
+  
   homeSpan.setStatusPin(32).setControlPin(26).begin(Category::GarageDoorOpeners,
                                                     "Garage Door");
 
