@@ -1,6 +1,74 @@
-#include <Arduino.h>
-
 #include "src/HomeSpan.h"
+#include <Arduino.h>
+#include <WiFiClient.h>
+#include <queue>
+
+class HttpLog {
+private:
+  const char *channel = "garage";
+  const int timeout = 5000;
+
+  const char *server_;
+  int port_;
+  std::queue<char *> queue_;
+
+public:
+  HttpLog(const char *server, int port) {
+    server_ = server;
+    port_ = port;
+  }
+
+  void Log(const char *format, ...) {
+    // Warning: later, we will put message directly into a json string.
+    // We do nothing to make sure the json string is valid or escape any
+    // characters.
+    char *message;
+    va_list args;
+    va_start(args, format);
+    vasprintf(&message, format, args);
+    va_end(args);
+    queue_.push(message);
+    LOG1("-- %s\n", message);
+  }
+
+  void loop() {
+    if (!queue_.empty()) {
+      char *message = queue_.front();
+      queue_.pop();
+
+      WiFiClient client;
+      client.connect(server_, port_, 5000);
+      if (client.connected()) {
+        char *json;
+        asprintf(&json, "{\"channel\":\"%s\",\"message\":\"%s\"}", channel,
+                 message);
+
+        // clang-format off
+        const char *format = 
+          "POST / HTTP/1.1\r\n"
+          "Host: %s:%d\r\n"
+          "Accept: */*\r\n"
+          "Content-Type: application/json\r\n"
+          "Content-Length: %d\r\n\r\n"
+          "%s\r\n\r\n";
+        // clang-format on
+        char *request;
+        asprintf(&request, format, server_, port_, strlen(json), json);
+        if (0 == client.write(request)) {
+          LOG0("Failed to log on http log server %s:%d\n", server_, port_);
+        }
+        free(json);
+        free(request);
+      } else {
+        LOG0("Failed to connect to http log server %s:%d\n", server_, port_);
+      }
+
+      free(message);
+    }
+  }
+};
+
+HttpLog httpLog("andromeda", 3000);
 
 struct DEV_GarageDoor : Service::GarageDoorOpener {
   // Debounce time for the contact sensors. Adjust based on the particular
@@ -114,7 +182,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       if (value_upper == LOW && value_lower == LOW) {
         // This scenario shouldn't be possible. If we are here, the sensors
         // must be malfunctioning.
-        Serial.print("-- Yo, fix your sensors. They are both closed.\n");
+        httpLog.Log("Yo, fix your sensors. They are both closed.");
       }
       // The door could be OPENING, CLOSING, or STOPPED. But there is no way we
       // can tell. So we assume it's STOPPED. If it's indeed OPENING or CLOSING,
@@ -129,25 +197,24 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     }
     current_state.setVal(state);
     target_state.setVal(target);
-    Serial.printf("-- Initializing, current state: %s, target state: %s.\n",
-                  door_state_to_string(state),
-                  target == Characteristic::TargetDoorState::OPEN ? "OPEN"
-                                                                  : "CLOSED");
+    httpLog.Log("Initializing, current state: %s, target state: %s.",
+                door_state_to_string(state),
+                target == Characteristic::TargetDoorState::OPEN ? "OPEN"
+                                                                : "CLOSED");
   }
 
   void trigger_relay() {
     if (state != door_state::OPEN && state != door_state::CLOSED &&
         state != door_state::STOPPED) {
-      Serial.printf("-- Unexpected call to trigger_relay() in state %s.\n",
-                    door_state_to_string(state));
+      httpLog.Log("Unexpected call to trigger_relay() in state %s.",
+                  door_state_to_string(state));
       return;
     }
-    Serial.printf("-- Turning on the relay for %d milliseconds.\n",
-                  millis_relay);
+    httpLog.Log("Turning on the relay for %d milliseconds.", millis_relay);
     digitalWrite(pin_relay, HIGH);
     delay(millis_relay);
     digitalWrite(pin_relay, LOW);
-    Serial.printf("-- Starting the start rimer.\n");
+    httpLog.Log("Starting the start rimer.");
     millis_timer_start = millis();
   }
 
@@ -161,12 +228,12 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
   }
 
   boolean update() override {
-    Serial.printf("-- Operation requested: %s.\n",
-                  target_state.getNewVal() ==
-                          Characteristic::TargetDoorState::OPEN
-                      ? "OPEN"
-                      : "CLOSE");
-    Serial.printf("-- Current state is %s.\n", door_state_to_string(state));
+    httpLog.Log("Operation requested: %s.",
+                target_state.getNewVal() ==
+                        Characteristic::TargetDoorState::OPEN
+                    ? "OPEN"
+                    : "CLOSE");
+    httpLog.Log("Current state is %s.", door_state_to_string(state));
 
     uint8_t target = target_state.getNewVal();
 
@@ -174,12 +241,12 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       switch (state) {
       case door_state::OPEN:
       case door_state::OPENING:
-        Serial.printf("-- Noop.\n");
+        httpLog.Log("Noop.");
         break;
       case door_state::CLOSING:
         // Do nothing for now, but once we have reached the CLOSED state,
         // trigger the relay to open.
-        Serial.printf("-- Noop, but setting pending_operation.\n");
+        httpLog.Log("Noop, but setting pending_operation.");
         pending_operation = true;
         break;
       case door_state::CLOSED:
@@ -192,10 +259,10 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       switch (state) {
       case door_state::CLOSED:
       case door_state::CLOSING:
-        Serial.printf("-- Noop.\n");
+        httpLog.Log("Noop.");
         break;
       case door_state::OPENING:
-        Serial.printf("-- Noop, but setting pending_operation.\n");
+        httpLog.Log("Noop, but setting pending_operation.");
         pending_operation = true;
         break;
       case door_state::OPEN:
@@ -232,9 +299,8 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     if (pin == pin_upper && type == SpanButton::OPEN) {
       // Upper, Rising
       if (state != door_state::OPEN) {
-        Serial.printf(
-            "-- Upper sensor falling. Invalid state: %s. Resetting.\n",
-            door_state_to_string(state));
+        httpLog.Log("Upper sensor falling. Invalid state: %s. Resetting.",
+                    door_state_to_string(state));
         init();
       }
       transition(door_state::CLOSING);
@@ -244,8 +310,8 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       // Upper, Falling
       if (state != door_state::OPENING && state != door_state::CLOSING &&
           state != door_state::STOPPED) {
-        Serial.printf("-- Upper sensor rising. Invalid state: %s. Resetting.\n",
-                      door_state_to_string(state));
+        httpLog.Log("Upper sensor rising. Invalid state: %s. Resetting.",
+                    door_state_to_string(state));
         init();
       }
       transition(door_state::OPEN);
@@ -254,9 +320,8 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     if (pin == pin_lower && type == SpanButton::OPEN) {
       // Lower, Rising
       if (state != door_state::CLOSED) {
-        Serial.printf(
-            "-- Lower sensor falling. Invalid state: %s. Resetting.\n",
-            door_state_to_string(state));
+        httpLog.Log("Lower sensor falling. Invalid state: %s. Resetting.",
+                    door_state_to_string(state));
         init();
       }
       transition(door_state::OPENING);
@@ -266,8 +331,8 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       // Lower, Falling
       if (state != door_state::OPENING && state != door_state::CLOSING &&
           state != door_state::STOPPED) {
-        Serial.printf("-- Lower sensor rising. Invalid state: %s. Resetting.\n",
-                      door_state_to_string(state));
+        httpLog.Log("Lower sensor rising. Invalid state: %s. Resetting.",
+                    door_state_to_string(state));
         init();
       }
       transition(door_state::CLOSED);
@@ -280,8 +345,8 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       // We were opening or closing. But the timer has run out, probably due to
       // user intervention.
       if (state != door_state::CLOSING && state != door_state::OPENING) {
-        Serial.printf("-- Finish timer running out. Invalid state: %s.\n",
-                      door_state_to_string(state));
+        httpLog.Log("Finish timer running out. Invalid state: %s.",
+                    door_state_to_string(state));
         pending_operation = false;
       }
       transition(door_state::STOPPED);
@@ -290,7 +355,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
 
     if (millis_timer_start != 0 &&
         millis_since(millis_timer_start) > millis_timeout_start) {
-      Serial.printf("-- Start timer ran out. The motor is malfunctioning.\n");
+      httpLog.Log("Start timer ran out. The motor is malfunctioning.");
       millis_timer_start = 0;
       // An operation started but has timed out. This indicates a possible motor
       // failure. We are not able to leave the current state without external
@@ -299,7 +364,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       // waiting indefinitely. The STOPPED state is considered as open by the
       // Home app.
       if (pending_operation) {
-        Serial.printf("-- Abandoning pending operation.\n");
+        httpLog.Log("Abandoning pending operation.");
         pending_operation = false;
       }
 
@@ -312,7 +377,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
         target_state.setVal(Characteristic::TargetDoorState::OPEN);
         break;
       default:
-        Serial.printf("-- Invalid state: %s.\n", door_state_to_string(state));
+        httpLog.Log("Invalid state: %s.", door_state_to_string(state));
         pending_operation = false;
         break;
       }
@@ -320,8 +385,8 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
   }
 
   void transition(door_state new_state) {
-    Serial.printf("-- Transitioning from %s to %s.\n",
-                  door_state_to_string(state), door_state_to_string(new_state));
+    httpLog.Log("Transitioning from %s to %s.", door_state_to_string(state),
+                door_state_to_string(new_state));
     door_state old_state = state;
     state = new_state;
     current_state.setVal(state);
@@ -333,10 +398,10 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     // for us to distinguish. In that case, we will let the human correct the
     // situation by pressing the switch again.
     if (old_state == door_state::CLOSING && new_state == door_state::OPEN) {
-      Serial.printf("-- Obstruction detected.\n");
+      httpLog.Log("Obstruction detected.");
       obstruction.setVal(true);
       if (pending_operation) {
-        Serial.printf("-- Abandoning pending operation.\n");
+        httpLog.Log("Abandoning pending operation.");
         pending_operation = false;
       }
     } else {
@@ -349,7 +414,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     // to close it.
     if (old_state == door_state::OPENING && new_state == door_state::CLOSED) {
       if (pending_operation) {
-        Serial.printf("-- Abandoning pending operation.\n");
+        httpLog.Log("Abandoning pending operation.");
         pending_operation = false;
       }
     }
@@ -357,17 +422,17 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     if (new_state != door_state::STOPPED && millis_timer_start != 0) {
       // A start timer is running, expecting us to reach one of these states:
       // OPENING, CLOSING, OPEN, or CLOSED.  Now we can stop it.
-      Serial.println("-- Stopping the start timer.");
+      httpLog.Log("Stopping the start timer.");
       millis_timer_start = 0;
     }
 
     if (new_state == door_state::OPENING || new_state == door_state::CLOSING) {
-      Serial.println("-- Starting the finish timer.");
+      httpLog.Log("Starting the finish timer.");
       // We expect to reach OPEN or CLOSED shortly, or STOPPED if the user has
       // intervenved.
       millis_timer_finish = millis();
     } else if (millis_timer_finish != 0) {
-      Serial.println("-- Stopping the finish timer.");
+      httpLog.Log("Stopping the finish timer.");
       // A finish timer is running, expecting us to reach one of the three
       // stable states (OPEN, CLOSED, STOPPTED). Now we can stop it.
       millis_timer_finish = 0;
@@ -380,17 +445,17 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       case door_state::STOPPED:
         // We are here because of a manual intervention. So we abandon the
         // pending operation, assuming that's why the user intervened.
-        Serial.printf("-- Abandoning pending operation.\n");
+        httpLog.Log("Abandoning pending operation.");
         pending_operation = false;
         break;
       case door_state::OPEN:
         if (target == Characteristic::TargetDoorState::CLOSED) {
           // At this point, the previous state must be STOPPED.
           // Otherwise we would've abandoned the pending operation.
-          Serial.printf("-- Continuing pending operation: CLOSE.\n");
+          httpLog.Log("Continuing pending operation: CLOSE.");
           trigger_relay();
         } else {
-          Serial.printf("-- Operation completed: OPEN.\n");
+          httpLog.Log("Operation completed: OPEN.");
           pending_operation = false;
         }
         break;
@@ -398,10 +463,10 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
         if (target == Characteristic::TargetDoorState::OPEN) {
           // At this point, the previous state must be STOPPED.
           // Otherwise, we would've abandonded the pending operation.
-          Serial.printf("-- Continuing pending operation: OPEN.\n");
+          httpLog.Log("Continuing pending operation: OPEN.");
           trigger_relay();
         } else {
-          Serial.printf("-- Operation completed: CLOSE.\n");
+          httpLog.Log("Operation completed: CLOSE.");
           pending_operation = false;
         }
         break;
@@ -422,7 +487,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
 };
 
 void setup() {
-  Serial.begin(115200);
+  // Serial.begin(115200);
 
   homeSpan.setStatusPin(32).setControlPin(26).begin(Category::GarageDoorOpeners,
                                                     "Garage Door");
@@ -436,4 +501,4 @@ void setup() {
   homeSpan.autoPoll();
 }
 
-void loop() {}
+void loop() { httpLog.loop(); }

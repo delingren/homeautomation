@@ -428,20 +428,45 @@ Saves entries in `/var/lib/httplog/$ip.$channel.log`, one line for each entry, w
 To test the service:
 
 ```
-curl -X POST -H "Content-Type: application/json" -d '{"channel":"garage","message":"hello world","time":"2024-04-06T19:20:30+08:00"}' http://localhost:3000/
+curl -X POST -H "Content-Type: application/json" -d '{"channel":"garage","message":"hello world"}' http://localhost:3000/
 ```
 
 ### Startup
 I am using [pm2](https://pm2.keymetrics.io/docs/usage/quick-start/) to run the service as a daemon upon booting.
 
-- Create a dedicated user `httplog`
-- Create a folder to store the logs `/var/lig/httplog`
-- Deploy the script to `/home/httplog/`
-- Set up pm2 to run as part of startup script:
+- Install node.js, npm, and pm2:  
+  ```
+  sudo apt install nodejs
+  sudo apt install npm
+  sudo npm install pm2@latest -g
+  ```
+- Create a dedicated user:  
+  ```sudo useradd httplog```
+- Create a folder to store the logs:  
+  ```
+  sudo mkdir -p /var/lib/httplog
+  sudo chown httplog /var/lib/httplog
+  sudo chgrp httplog /var/lib/httplog
+  ```
+- Deploy the script to the server from a client (adjust permissions if needed):  
+  ```scp httplog.js andromeda:/var/lib/httplog```
+- Set up pm2 to run as part of startup script:  
   ```sudo env PATH=$PATH:/usr/bin /usr/local/lib/node_modules/pm2/bin/pm2 startup systemd -u httplog --hp /home/httplog/```
-- Switch to the new user: `sudo -u httplog bash` 
-- Launch it with pm2: `pm2 logging_server.js`
-- Save the list: `pm2 save`
+- Switch to the new user:  
+  ```sudo -u httplog bash```
+- Launch it with pm2:  
+  ```pm2 start httplog.js```
+- Save the list:  
+  ```pm2 save```
+- Reboot and make sure it's running:
+  ```
+  sudo -u httplog bash
+  pm2 list
+  ```
+- From a client, use curl to test:
+  ```
+  curl -X POST -H "Content-Type: application/json" -d '{"channel":"garage","message":"hello httplog"}' http://server:3000/
+  ```
 
 
 ## Final assembly and installation
