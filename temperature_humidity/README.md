@@ -65,10 +65,45 @@ Notes:
 
 */
 
+## Receiver & Antenna
+
+No antenna
+MX-RM-5V
+  5cm: 2 packets and no errors
+  30cm: no reception at all
+WL433
+  5cm: 3 packets with some parity and checksum errors
+  30cm: 3 packets with a lot of parity and checksum errors
+  2m: no reception or 0 packets (i.e. errored out during transmission)  
+RXB6
+  5cm: 3 packets and no errors
+  30cm: 3 packets and no errors
+  2m: 3 packets with occasional errors
+
+Coiled antenna
+MX-RM-5V
+  2m: no reception
+WL433
+  2m: 3 packets with a lof of errors
+RXB6
+  2m: 3 packets with occasional errors
+  8m /w a wall: 3 packets with occasional errors, acceptable
+  12m /w a wall: 3 packets with a lot of errors
+
+17cm wire antenna
+WL433
+  2m: 3 packets with a lot of errors
+RXB6
+  2m: 3 packets with occasional errors
+  8m /w a wall: 3 packets with occasional errors
+  12m /w a wall: 3 packets with occasional errors, acceptable
+  15m w/ 2 walls: no reception or 3 packets with many errors. however, it greatly improves when powered by 5v
+
+RXB6 is the winner. With a coiled antenna, 8m w/ a wall is acceptable.
+
 ## Software
 
-
-Resources
+## Resources
 https://www.osengr.org/WxShield/Downloads/Weather-Sensor-RF-Protocols.pdf
 https://wiki.jmehan.com/display/KNOW/Reverse+Engineering+Acurite+Temperature+Sensor
 https://www.techspin.info/archives/1049
