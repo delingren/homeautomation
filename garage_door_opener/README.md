@@ -400,38 +400,22 @@ To minimize trouble shooting in production, I use switches to simulate the senso
   - tile: closed -> opening -> open
 
 ## Logging
-To help with diagnostics, I am logging messages to a remote server. The server is running on my home LAN on an Ubuntu machine. I am planning to use it for other projects as well.
-
-The service is very simple, it accepts requests over http post requests.
+To help with diagnostics, I am logging messages to a remote server. The server is running on my home LAN on an Ubuntu machine. I am planning to use it for other projects as well. The service is very simple, it accepts requests over http post requests and writes the log entries to a text file. When the file gets too big, it's rolled over.
 
 ### Client
 Posts over http with the following info in json format
 1. channel name (containing only alphanumericals, `_`, `-`, and `.`)
-1. time stamp (ISO 8601 format)
 1. message (string, properly escaped for json)
 
 E.g. 
 
 ```
-{
-  "channel":"garage",
-  "message":"hello world",
-  "time":"2024-04-06T19:20:30+08:00"
-}
+{"channel":"garage","message":"hello world"}
 ```
-
-To use WiFiClient on ESP32, follow the [example](https://github.com/espressif/arduino-esp32/tree/master/libraries/WiFi/examples/WiFiClient)
 
 ### Server
-Saves entries in `/var/lib/httplog/$ip.$channel.log`, one line for each entry, with the the time stamp and the message, separated by a `,`. Note that I am not checking if the message itself contains a new line. If it does, it'll mess up with the format. But this is for my personal usage.
+Saves entries in `/var/lib/httplog/$ip.$channel.log`, one line for each entry, with the the time stamp and the message, separated by a `,`. Note that I am not checking if the message itself contains a new line. If it does, it'll mess up with the format. But this is for my personal usage, not a library.
 
-To test the service:
-
-```
-curl -X POST -H "Content-Type: application/json" -d '{"channel":"garage","message":"hello world"}' http://localhost:3000/
-```
-
-### Startup
 I am using [pm2](https://pm2.keymetrics.io/docs/usage/quick-start/) to run the service as a daemon upon booting.
 
 - Install node.js, npm, and pm2:  
@@ -467,7 +451,6 @@ I am using [pm2](https://pm2.keymetrics.io/docs/usage/quick-start/) to run the s
   ```
   curl -X POST -H "Content-Type: application/json" -d '{"channel":"garage","message":"hello httplog"}' http://server:3000/
   ```
-
 
 ## Final assembly and installation
 The MCU and the relay
