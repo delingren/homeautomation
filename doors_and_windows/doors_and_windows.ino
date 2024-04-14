@@ -22,7 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 *******************************************************************************/
 
+#include "acurite.h"
 #include "src/HomeSpan.h"
+
 #include <utility>
 
 // Represents a contact sensor typically used by security systems to monitor the
@@ -48,7 +50,7 @@ struct DEV_DoorWindow : Service::ContactSensor {
 
     // Report initial state
     uint8_t value = digitalRead(pin);
-    Serial.printf("---- Initial pin %d value: %d\n", pin, value);
+    LOG1("---- Initial pin %d value: %d\n", pin, value);
     state.setVal(pin_value_to_state(value));
 
     toggle = new SpanToggle(pin, PushButton::TRIGGER_ON_LOW, millis_debounce);
@@ -62,7 +64,7 @@ struct DEV_DoorWindow : Service::ContactSensor {
 
   void button(int pin, int type) override {
     uint8_t value = type == SpanButton::OPEN ? HIGH : LOW;
-    Serial.printf("---- Updating pin %d's value to %d\n", pin, value);
+    LOG1("---- Updating pin %d's value to %d\n", pin, value);
     state.setVal(pin_value_to_state(value));
   }
 };
@@ -72,8 +74,7 @@ std::vector<std::pair<uint8_t, DEV_DoorWindow *>> DEV_DoorWindow::all_sensors;
 void setup() {
   Serial.begin(115200);
 
-  homeSpan.setStatusPin(26).setControlPin(27).begin(Category::Bridges,
-                                                    "Doors and Windows");
+  homeSpan.setStatusPin(2).begin(Category::Bridges, "Walk-in Closet");
 
   new SpanAccessory();
   new Service::AccessoryInformation();
@@ -82,68 +83,80 @@ void setup() {
   new SpanAccessory();
   new Service::AccessoryInformation();
   new Characteristic::Identify();
-  new Characteristic::Name("Front Entrance");
-  new DEV_DoorWindow(13);
-
-  new SpanAccessory();
-  new Service::AccessoryInformation();
-  new Characteristic::Identify();
-  new Characteristic::Name("Garage Entrance");
-  new DEV_DoorWindow(4);
-
-  new SpanAccessory();
-  new Service::AccessoryInformation();
-  new Characteristic::Identify();
-  new Characteristic::Name("Patio Door");
-  new DEV_DoorWindow(25);
-
-  new SpanAccessory();
-  new Service::AccessoryInformation();
-  new Characteristic::Identify();
-  new Characteristic::Name("Backyard Window");
-  new DEV_DoorWindow(16);
-
-  new SpanAccessory();
-  new Service::AccessoryInformation();
-  new Characteristic::Identify();
-  new Characteristic::Name("Bathoom Window");
-  new DEV_DoorWindow(17);
-
-  new SpanAccessory();
-  new Service::AccessoryInformation();
-  new Characteristic::Identify();
-  new Characteristic::Name("Den Window");
-  new DEV_DoorWindow(18);
-
-  new SpanAccessory();
-  new Service::AccessoryInformation();
-  new Characteristic::Identify();
-  new Characteristic::Name("Bay Window");
-  new DEV_DoorWindow(19);
+  new Characteristic::Name("Fireplace L");
+  new DEV_DoorWindow(32);
 
   new SpanAccessory();
   new Service::AccessoryInformation();
   new Characteristic::Identify();
   new Characteristic::Name("Picture Window");
-  new DEV_DoorWindow(21);
+  new DEV_DoorWindow(33);
+
+  new SpanAccessory();
+  new Service::AccessoryInformation();
+  new Characteristic::Identify();
+  new Characteristic::Name("Fireplace R");
+  new DEV_DoorWindow(25);
+
+  new SpanAccessory();
+  new Service::AccessoryInformation();
+  new Characteristic::Identify();
+  new Characteristic::Name("Den Window");
+  new DEV_DoorWindow(26);
+
+  new SpanAccessory();
+  new Service::AccessoryInformation();
+  new Characteristic::Identify();
+  new Characteristic::Name("Backyard Window");
+  new DEV_DoorWindow(27);
 
   new SpanAccessory();
   new Service::AccessoryInformation();
   new Characteristic::Identify();
   new Characteristic::Name("Kitchen Window");
+  new DEV_DoorWindow(14);
+
+  new SpanAccessory();
+  new Service::AccessoryInformation();
+  new Characteristic::Identify();
+  new Characteristic::Name("Bay Window");
+  new DEV_DoorWindow(12);
+
+  new SpanAccessory();
+  new Service::AccessoryInformation();
+  new Characteristic::Identify();
+  new Characteristic::Name("Front Door");
+  new DEV_DoorWindow(13);
+
+  new SpanAccessory();
+  new Service::AccessoryInformation();
+  new Characteristic::Identify();
+  new Characteristic::Name("Patio Door");
   new DEV_DoorWindow(22);
 
   new SpanAccessory();
   new Service::AccessoryInformation();
   new Characteristic::Identify();
-  new Characteristic::Name("Fireplace L Window");
-  new DEV_DoorWindow(23);
+  new Characteristic::Name("Bathroom Window");
+  new DEV_DoorWindow(21);
 
   new SpanAccessory();
   new Service::AccessoryInformation();
   new Characteristic::Identify();
-  new Characteristic::Name("Fireplace R Window");
-  new DEV_DoorWindow(2);
+  new Characteristic::Name("Garage Entry");
+  new DEV_DoorWindow(19);
+
+  // new SpanAccessory();
+  // new Service::AccessoryInformation();
+  // new Characteristic::Identify();
+  // new Characteristic::Name("18");
+  // new DEV_DoorWindow(18);
+
+  new SpanAccessory();
+  new Service::AccessoryInformation();
+  new Characteristic::Identify();
+  new Characteristic::Name("Master Bathroom");
+  new DEV_Acurite(23);
 
   homeSpan.autoPoll();
 }
