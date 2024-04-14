@@ -34,7 +34,7 @@ I'm powering this unit with a home made 12 volt DC UPS. I have a bunch of adjust
 
 ### Misc
 * Perfboard.
-* Project enclusure. 115x90x55. I 3d printed a framework to mount the power supply and the perfboard.
+* Project enclusure. 100x68x50. I 3d printed a framework to mount the power supply and the perfboard.
 * Barrel connector (for power).
 * Terminal posts (for connecting the wires of the contact sensors).
 
