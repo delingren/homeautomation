@@ -488,9 +488,9 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
 
 void setup() {
   Serial.begin(115200);
-  
-  homeSpan.setStatusPin(32).setControlPin(26).begin(Category::GarageDoorOpeners,
-                                                    "Garage Door");
+  homeSpan.enableOTA();
+  homeSpan.setSketchVersion("1.0").setStatusPin(32).setControlPin(26).begin(
+      Category::GarageDoorOpeners, "Garage Door");
 
   new SpanAccessory();
   new Service::AccessoryInformation();
