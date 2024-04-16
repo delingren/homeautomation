@@ -23,58 +23,18 @@ THE SOFTWARE.
 *******************************************************************************/
 
 #include "acurite.h"
+#include "door_window.h"
 #include "src/HomeSpan.h"
 
 #include <utility>
 
-// Represents a contact sensor typically used by security systems to monitor the
-// status of doors and windows. The sensor is connected to a pullup input pin
-// and the ground. When it's open, the pin is pulled up high. When it's closed,
-// it's pulled to the ground. Debouncing is done in the software.
-struct DEV_DoorWindow : Service::ContactSensor {
-  const unsigned long millis_debounce = 100;
-
-  static std::vector<std::pair<uint8_t, DEV_DoorWindow *>> all_sensors;
-
-  static int pin_value_to_state(int val) {
-    return val == LOW ? Characteristic::ContactSensorState::DETECTED
-                      : Characteristic::ContactSensorState::NOT_DETECTED;
-  }
-
-  Characteristic::ContactSensorState state;
-
-  SpanToggle *toggle;
-
-  DEV_DoorWindow(uint8_t pin) : Service::ContactSensor() {
-    pinMode(pin, INPUT_PULLUP);
-
-    // Report initial state
-    uint8_t value = digitalRead(pin);
-    LOG1("---- Initial pin %d value: %d\n", pin, value);
-    state.setVal(pin_value_to_state(value));
-
-    toggle = new SpanToggle(pin, PushButton::TRIGGER_ON_LOW, millis_debounce);
-  }
-
-  ~DEV_DoorWindow() {
-    if (toggle != nullptr) {
-      delete toggle;
-    }
-  }
-
-  void button(int pin, int type) override {
-    uint8_t value = type == SpanButton::OPEN ? HIGH : LOW;
-    LOG1("---- Updating pin %d's value to %d\n", pin, value);
-    state.setVal(pin_value_to_state(value));
-  }
-};
-
-std::vector<std::pair<uint8_t, DEV_DoorWindow *>> DEV_DoorWindow::all_sensors;
-
 void setup() {
   Serial.begin(115200);
 
-  homeSpan.setStatusPin(2).begin(Category::Bridges, "Walk-in Closet");
+  homeSpan.enableOTA();
+  homeSpan.setSketchVersion("1.01");
+  homeSpan.setStatusPin(2).begin(Category::Bridges, "Walk-in Closet",
+                                 "WALK-IN-CLOSET");
 
   new SpanAccessory();
   new Service::AccessoryInformation();
@@ -146,6 +106,7 @@ void setup() {
   new Characteristic::Name("Garage Entry");
   new DEV_DoorWindow(19);
 
+  // Pin 18 is connected on the PCB but commented out since it's not being used.
   // new SpanAccessory();
   // new Service::AccessoryInformation();
   // new Characteristic::Identify();
@@ -156,7 +117,10 @@ void setup() {
   new Service::AccessoryInformation();
   new Characteristic::Identify();
   new Characteristic::Name("Master Bathroom");
-  new DEV_Acurite(23);
+  // 0x03 = Channel A, 0x02 = Channel B, 0x00 = Channel C
+  // 0x2B35 = 592TXR
+  new DEV_Acurite(0x03, 0x2B35);
+  DEV_Acurite::setPin(23);
 
   homeSpan.autoPoll();
 }
