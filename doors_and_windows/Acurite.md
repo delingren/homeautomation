@@ -1,10 +1,10 @@
 # Temperature and Humidity Sensor
 
 ## Goal
-* Decode temperature and humidity data from an AcuRite weather station with an ESP32.
+* Decode temperature and humidity data from an Acurite weather station with an ESP32.
 
 ## Hardware
-* The sensor I bought: * Model: 592TXR [AcuRite Wireless Indoor Outdoor Temperature and Humidity Sensor (06002M)](https://www.amazon.com/dp/B00T0K8NXC). It transfers data over the [standard LPD433 band](https://en.wikipedia.org/wiki/LPD433).
+* The sensor I bought: Model: 592TXR [AcuRite Wireless Indoor Outdoor Temperature and Humidity Sensor (06002M)](https://www.amazon.com/dp/B00T0K8NXC). It transfers data over the [standard LPD433 band](https://en.wikipedia.org/wiki/LPD433).
 * 433 Mhz receiver.
 * Microcontroller. I already have an ESP32 running to monitor the contact sensors on the doors and windows. So I'm piggybacking on that MCU.
 
@@ -18,31 +18,28 @@ I used a RTL-SDR and rtl_433 to capture the [waveform](https://triq.org/pdv/#AAB
 
 In summary:
 
-```
-| Byte 0    | Byte 1    | Byte 2    | Byte 3    | Byte 4    | Byte 5    | Byte 6    |
-| --------- | --------- | --------- | --------- | --------- | --------- | --------- |
-| CCII IIII | IIII IIII | pB00 0100 | pHHH HHHH | p??T TTTT | pTTT TTTT | KKKK KKKK |
-
-
-- C: Channel 00: C, 10: B, 11: A, (01 is invalid)
-- I: Device ID (14 bits)
-- B: Battery, 1 is battery OK, 0 is battery low (observed low < 2.5V)
-- M: Message type (6 bits), 0x04
-- T: Temperature Celsius (11 - 14 bits?), + 1000 * 10
-- H: Relative Humidity (%) (7 bits)
-- K: Checksum (8 bits)
-- p: Parity bit
-
-Notes:
-
-- Temperature
-  - Encoded as Celsius + 1000 * 10
-  - only 11 bits needed for specified range -40 C to 70 C (-40 F - 158 F)
-  - However 14 bits available for temperature, giving possible range of -100 C to 1538.4 C
-```
+* One transmission consists of three identical packets for redundancy.
+* A gap of ~2200 μs separates two packets.
+* Each packet starts with 4 pulses and 4 gaps, ~600 μs each.
+* After the sync pulses, 56 bits are transmitted.
+* A high (1) bit consists of a long (~400 μs) pulse and a short (230 μs) gap.
+* A low (0) bit consists of a short pulse and a long gap.
+* The meaning of the 56 bits is as follows.
+  ```
+  | Byte 0    | Byte 1    | Byte 2    | Byte 3    | Byte 4    | Byte 5    | Byte 6    |
+  | --------- | --------- | --------- | --------- | --------- | --------- | --------- |
+  | CCII IIII | IIII IIII | pB00 0100 | pHHH HHHH | p??T TTTT | pTTT TTTT | KKKK KKKK |
+  ```
+  - C: Channel 00: C, 10: B, 11: A, (01 is invalid)
+  - I: Device ID (14 bits)
+  - B: Battery, 1 is battery OK, 0 is battery low (observed low < 2.5V)
+  - M: Message type (6 bits), 0x04
+  - T: Temperature Celsius (11 - 14 bits?) * 10 + 1000
+  - H: Relative Humidity (%) (7 bits)
+  - K: Checksum (8 bits)
+  - p: Parity bit
 
 There have been numerous independent efforts to revserse engineer this particular sensor. I'm listing some of them that I have read in the reference.
-
 
 ## Receiver & Antenna
 I tried a few cheap RF receivers with different (or no) antennas.
@@ -79,7 +76,7 @@ I tried a few cheap RF receivers with different (or no) antennas.
     - 12m /w a wall: 3 packets with occasional errors, acceptable
     - 15m w/ 2 walls: no reception or 3 packets with many errors. however, it greatly improves when powered by 5v, compared with 3.3v
 
-RXB6 is the winner. With a coiled antenna, 8m w/ a wall is acceptable for my use case.
+RXB6 is the winner. With a coiled antenna, 8m w/ a wall is acceptable for my use case. However, the timing is still way inaccurate. So I had to greatly relax the tolerance to be able to find the sync pulses. And for the payload, I am not decoding based on the absolute widths of the pulses and gaps, but rather the relative ones. I.e. if the pulse is longer than the gap, it's a 1, otherwise a 0. This approach may lead to many false positives if the 433 MHz band is noisy in the area. But it seems to work OK for me. I occasionally get some false sync pulses which don't lead to reading 56 bits of payload data. But it's manageable so far. In the long term, I should investigate on a receiver of better quality.
 
 ## References
 * https://www.osengr.org/WxShield/Downloads/Weather-Sensor-RF-Protocols.pdf

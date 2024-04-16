@@ -5,7 +5,7 @@ My house has an old home security system installed when it was built in 2004. It
 
 Most of my personal computing is done on Apple's ecosystem. So, I'd like to integrate it with HomeKit. Originally, I prototyped with a Raspberry Pi, running HomeBridge and [homebridge-rpi plugin](https://github.com/ebaauw/homebridge-rpi). It worked great. But I later ran into [HomeSpan Library](https://github.com/HomeSpan/HomeSpan/) for ESP32 that implements HAP, the protocol that talks to Apple HomeKit. So, I thought it was silly to run a full blown Linux for something this trivial. I beliee Espressif has also introduced an SDK based on ESP-IDF. But Arduino framework is easy to use for a simple project like this.
 
-While I was working on this project, I decided to add a component to monitor the temperature and humidity of my master bedroom so that I can automate the fan. These two components are completely independent of each other but it's convenient to combine them due to the physical location.
+While I was working on this project, I decided to add a component to monitor the temperature and humidity of the bathroom so that I can automate the fan. These two components are completely independent of each other but it's convenient to combine them due to the physical location.
 
 ## Hardware setup
 
@@ -15,7 +15,7 @@ All the preinstalled contact sensors are simple [reed switches](https://en.wikip
 So the idea is to connect one wire to a pullup input pin and the other to the ground. So when the door or window is closed, the pin is grounded. Otherwise it's pulled high.
 
 ### Wireless temperature and humidity sensor
-I purchased an Acurite 592TXR temperature and humidity sensor which is supposed to work with a base station. But I am using an RF receiver to read its signals with the microcontroller. The waveform and data protocol have been reverse engineered. I am writing up the details in a separate doc.
+I purchased an Acurite 592TXR temperature and humidity sensor which is supposed to work with a base station. But I am using an RF receiver to read its signals with the microcontroller. The waveform and data protocol have been reverse engineered. I am writing up the details in a [separate doc](Acurite.md).
 
 ### RF receiver
 The temperature and humidity sensor I use sends signals on [433 MHz](https://en.wikipedia.org/wiki/LPD433), which is the frequency used by many low powder devices in the US. There are many cheap 433 MHz receivers on AliExpress and Amazon. I experimented with three and two of them are worthless. Either they are very noisy or the range is just a couple of feet. The one I settled with is RXB6. It workds OK within 10 meters with a small, coiled antenna. The reception would grealy improve if I used a 1/4-lambda (17cm) antenna. But I wanted to keep the whole project small to fit in a compact enclosure.
@@ -40,7 +40,7 @@ I'm powering this unit with a home made 12 volt DC UPS. I have a bunch of adjust
 
 ## Software
 
-The code for the contact sensors is straight-forward and self explaining. I did encounter a small road bump though. See the next section. Decoding the temperature and humidity sensor is a little more work. I'll elaborate in a separate doc.
+The code for the contact sensors is straight-forward and self explaining. I did encounter a small road bump though. See the next section. Decoding the temperature and humidity sensor is a little more work. I'll elaborate in a [separate doc](Acurite.md).
 
 I enlisted HomeSpan as a submodule of this repo so that it's all self contained.
 
