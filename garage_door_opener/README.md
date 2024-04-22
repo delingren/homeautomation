@@ -15,7 +15,10 @@ My garage door opener Genie [CM8600](https://www.geniecompany.com/product-suppor
 
 Also, when it's closing and it detects an obstruction, it reverses the direction of the motor and reverts to an open position. This is probably how most dumb garage openers work, or at least in a similar fasion. The remote works exactly as the button.
 
-Two limit switches are installed on the track. One for the open position (upper) and one for the closed position (lower). When the carriage hits a limit switch, the opener stops the motor. The limit switches are normally open. One of the leads is the ground. The other one appears to carry a +7.8V DC voltage.
+Two limit switches are installed on the track. One for the open position (upper) and one for the closed position (lower). When the carriage hits a limit switch, the opener stops the motor. The limit switches are normally open. One of the leads is the ground. The other one appears to carry a +7.8V DC voltage when open.
+
+### Schematic
+![Schematic](schematic.png)
 
 ### List of components
 * Microcontroller x 1
@@ -67,9 +70,6 @@ Also, interestingly, in practice, I am only getting ~4.6v from the +5v pin when 
 - M12 connectors. Other than power, the unit has 4 wires connecting to the garage door opener: ground, relay, and 2 limit switches. To make things tight and neat, I'm using a pair of M21 connectors.
 - PCB. I am not well versed in designing PCB boards. And it's too much hassle to manufacture just one board. So I'm using a [solderable breadboard](https://www.amazon.com/EPLZON-Solderable-Breadboard-Gold-Plated-Electronics/dp/B0BP28GYTV) like this:  
 ![Solderable Breadboard](solderable_breadboard.jpg)
-
-### Schematic
-![Schematic](schematic.png)
 
 ## Software
 I'm using Arduino framework and [HomeSpan Library](https://github.com/HomeSpan/HomeSpan) for this project. I chose Arduino over ESP-IDF because of the simplicity.
