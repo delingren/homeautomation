@@ -32,7 +32,7 @@ Two limit switches are installed on the track. One for the open position (upper)
 * Wires
 * Pin headers
 * USB-C breakout board
-* Project enclosure
+* Project enclosure (115x90x50)
 
 ### Microcontroller
 The brain of the project is an ESP32-WROOM-32UE MCU. I am using this MCU for the following reasons:
@@ -54,17 +54,16 @@ For detecting the state of the door, I am piggybacking on the existing limit swi
 Ideally, one would want to complately separate the two units. But I'm not too worried since an ESP32 is extremely cheap. And I don't want to deal with the hassle of installing two extra mechanical or [reed switches](https://www.amazon.com/gp/product/B0735BP1K4/) and running the wires.
 
 ### Indicators
-To make it easy to visualize the status of the switches, I am using two LEDs, one red and one green, tied to the limit switches. When a switch is closed, the corresponding LED lights up. The anode is connected to +5v and the cathode is connected to the GPIO pin. I'm using the +5v instead of the +3.3v due to that 0.7v drop on the 1N4007, which would reduce 3.3 to ~2.6, a bit low for the LEDs I have on hand. One caveat here is that the +5v is not regulated on the board. So there's a risk of frying the LEDs if that voltage goes too high. But I using a quality iPhone USB power adapter, so it shouldn't be a big problem.
+To make it easy to visualize the status of the switches, I am using two LEDs, one red and one green, tied to the limit switches. When a switch is closed, the corresponding LED lights up. The anode is connected to +5v and the cathode is connected to the GPIO pin. I'm using the +5v instead of the +3.3v due to that 0.7v drop on the 1N4007, which would reduce 3.3 to ~2.6, a bit low for the LEDs I have on hand. One caveat here is that the +5v is not regulated on the board. So there's a risk of frying the LEDs if that voltage goes too high, since my current limiting resistors are very small.
 
 Also, interestingly, in practice, I am only getting ~4.6v from the +5v pin when powered through the USB port. I thought it was directed connected to the Vcc of the USB port? Oh well. The remaining 3.9v (4.6 minus the drop on the diode) is good enough for the LEDs, whose voltage drop is ~3v and I'm using very small current limiting resistors (27 Ω) here.
 
 ### Misc
 - Status LED. Optionally, HomeSpan uses an LED to indicate its status. I am using a blue one for this purpose.
 - Control button. You can also interact with HomeSpan with a pushbutton.
-- Reset button. I am also using a pushbutton for resetting the devices, which is a bit easier than disconnecting the power supply.
 - Pinheaders. I soldered pinheaders to the Rx, Tx, Vcc, and ground pins of the ESP32 so that I can connect it to a serial monitor for debugging if needed. It's easier than connecting to the micro USB port once the board is inside the enclosure.
 - Antenna & U/FL to PR-SMA adapter. Since this device is running in the garage, where the WiFi reception isn't the strongest, I am using a board with an external antenna connector. 
-- USB C breakout pad. My ESP32 dev board comes with a micro USB port and I want to power it with a USB C plug. What's more, I don't want the layout to be constrained by the position of the USB port. Therefore I'm using a USB breakout board to interface with the outside. 
+- USB C breakout board. My ESP32 dev board comes with a micro USB port and I want to power it with a USB C plug. What's more, I don't want the layout to be constrained by the position of the USB port. Therefore I'm using a USB breakout board to interface with the outside. 
 - M12 connectors. Other than power, the unit has 4 wires connecting to the garage door opener: ground, relay, and 2 limit switches. To make things tight and neat, I'm using a pair of M21 connectors.
 - PCB. I am not well versed in designing PCB boards. And it's too much hassle to manufacture just one board. So I'm using a [solderable breadboard](https://www.amazon.com/EPLZON-Solderable-Breadboard-Gold-Plated-Electronics/dp/B0BP28GYTV) like this:  
 ![Solderable Breadboard](solderable_breadboard.jpg)
@@ -134,6 +133,8 @@ I use a dev board with a PCB antenna for prototyping. Interestingly, when insert
 The two rocker switches simulate the limit switches. The two pushbuttons were harvested from old mice. Their pins are 5mm pitch.
 
 To debug the final product where the USB port on the ESP is hard to reach, I use a USB to UART CP2102 adapter. Connect 5v, GND, Rx and Tx pins. To upload a sketch, you need to press and bold boot, then press and release reset. After uploading the sketch, you'll need to manually reset.
+
+However, I enabled OTA in the sketch, so that I can update the firmware over WiFi. So, hopefully I won't need to physically access the project in the future.
 
 ## Test cases
 To minimize trouble shooting in production, I use switches to simulate the sensors and fully test all these scenarios before hooking up with the actual opener.
@@ -453,11 +454,21 @@ I am using [pm2](https://pm2.keymetrics.io/docs/usage/quick-start/) to run the s
   ```
 
 ## Final assembly and installation
+Once the software has been throughly tested, it's time to solder all the components and mount everything in the enclosure. I 3d printed a framework to mount the PCB, the relay, the pushbutton, and the USB C breakout board inside the enclosure.
+
 The MCU and the relay
 * Enclosure
-  - Rest button
   - Control button
   - Status LED
   - Antenna connector (RP-SMA)
   - M12 connector (4 pins: GND, upper sensor, lower sensor, relay)
   - USB-C breakout board
+
+![Open](IMG_0231.jpeg)
+![Closed](IMG_0233.jpeg)
+
+To connect to the CM8600, I soldered two wires to limit switches on the sequencer assembly(part J on page 5 of the manual). The relay wires can be accessed on the terminal strip (part M). And the ground is the metal front plate (part B) and I just wrapped a wire around a screw (part 42).
+![Sequencer](IMG_0937.jpeg)
+
+And here is the final product:
+![Final product](IMG_0938.jpeg)

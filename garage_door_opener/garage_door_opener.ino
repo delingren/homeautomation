@@ -73,19 +73,19 @@ HttpLog httpLog("andromeda", 3000);
 struct DEV_GarageDoor : Service::GarageDoorOpener {
   // Debounce time for the contact sensors. Adjust based on the particular
   // sensor and the speed of the motor.
-  const unsigned long millis_debounce = 500;
+  const unsigned long millis_debounce = 200;
   // Timeout between the start of an open or close operation and a state that is
   // not STOPPED is reached. We could start an operation while in the STOPPED
   // state, so this value should be a little longer than it takes to fully open
   // or close the door.
-  const unsigned long millis_timeout_start = 5000;
+  const unsigned long millis_timeout_start = 15000;
   // Timeout between when a sensor is triggered and reaching OPEN or CLOSED. My
   // garage door reverses the course when it hits an obstruction when closing.
   // So this value should be a little longer than it takes to make a round trip.
-  const unsigned long millis_timeout_finish = 8000;
+  const unsigned long millis_timeout_finish = 30000;
   // Time need to keep the relay on to trigger the motor. Half a second works
   // well for my garage door.
-  const unsigned long millis_relay = 1000;
+  const unsigned long millis_relay = 800;
 
   // These values are the same as the those defined in
   // GarageDoorOpener::CurrentDoorState. We would use that enum but it's
@@ -489,8 +489,8 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
 void setup() {
   Serial.begin(115200);
   homeSpan.enableOTA();
-  homeSpan.setSketchVersion("1.0").setStatusPin(32).setControlPin(26).begin(
-      Category::GarageDoorOpeners, "Garage Door");
+  homeSpan.setSketchVersion("1.03").setStatusPin(32).setControlPin(26).begin(
+      Category::GarageDoorOpeners, "Garage Door", "GARAGE-DOOR-OPENER");
 
   new SpanAccessory();
   new Service::AccessoryInformation();
