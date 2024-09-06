@@ -294,7 +294,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     if (pin == pin_upper && type == SpanButton::OPEN) {
       // Upper, Rising
       if (state != door_state::OPEN) {
-        httpLog.Log("Upper sensor falling. Invalid state: %s. Resetting.",
+        httpLog.Log("Upper sensor rising. Invalid state: %s. Resetting.",
                     door_state_to_string(state));
         init();
       }
@@ -305,7 +305,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       // Upper, Falling
       if (state != door_state::OPENING && state != door_state::CLOSING &&
           state != door_state::STOPPED) {
-        httpLog.Log("Upper sensor rising. Invalid state: %s. Resetting.",
+        httpLog.Log("Upper sensor falling. Invalid state: %s. Resetting.",
                     door_state_to_string(state));
         init();
       }
@@ -315,7 +315,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
     if (pin == pin_lower && type == SpanButton::OPEN) {
       // Lower, Rising
       if (state != door_state::CLOSED) {
-        httpLog.Log("Lower sensor falling. Invalid state: %s. Resetting.",
+        httpLog.Log("Lower sensor rising. Invalid state: %s. Resetting.",
                     door_state_to_string(state));
         init();
       }
@@ -326,7 +326,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
       // Lower, Falling
       if (state != door_state::OPENING && state != door_state::CLOSING &&
           state != door_state::STOPPED) {
-        httpLog.Log("Lower sensor rising. Invalid state: %s. Resetting.",
+        httpLog.Log("Lower sensor falling. Invalid state: %s. Resetting.",
                     door_state_to_string(state));
         init();
       }
