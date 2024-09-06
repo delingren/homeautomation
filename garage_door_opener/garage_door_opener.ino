@@ -219,12 +219,7 @@ struct DEV_GarageDoor : Service::GarageDoorOpener {
   }
 
   static unsigned long millis_since(unsigned long millis_then) {
-    unsigned long millis_now = millis();
-    // millis() overflows after about 50 days. So, if millis_now < millis_last,
-    // that's what happened.
-    return millis_now >= millis_then
-               ? millis_now - millis_then
-               : 0xFFFFFFFF - (millis_then - millis_now) + 1;
+    return millis() - millis_then;
   }
 
   boolean update() override {
