@@ -472,3 +472,8 @@ To connect to the CM8600, I soldered two wires to limit switches on the sequence
 
 And here is the final product:
 ![Final product](IMG_0938.jpeg)
+
+## Build note
+* I have enlisted HomeSpan as a submodule such that this repo is self contained.
+* HomeSpan submodule is checked out at detatched head 1.9.0.
+* ESP32 3.x has some breaking changes. HomeSpan doesn't build. I used 2.0.17.
