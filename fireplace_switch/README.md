@@ -55,6 +55,6 @@ A couple of notes regarding the build:
 
 * In Arduino Studio, choose "Nologo ESP32C3 SuperMini" as the board.
 
-* I am powering the MCU on its 5V  pin directly. It doesn't seem to suffer the weird WiFi issue I experienced in the [doors and windows](doors_and_windows/) project. I randomly chose pin 5 to control the relay, mostly to make laying out the wire easy.
+* I am powering the MCU on its 5V  pin directly. It doesn't seem to suffer the weird WiFi issue I experienced in the [doors and windows](../doors_and_windows/) project. I randomly chose pin 5 to control the relay, mostly to make laying out the wire easy.
 
-[pinout](esp32-c3-pinout.jpg)
+![pinout](esp32-c3-pinout.jpg)
