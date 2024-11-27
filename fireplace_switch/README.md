@@ -49,8 +49,12 @@ Installation is rather straight-forward. The biggest challenge is finding the br
 
 Viola! An hour and half later, I have myself a HomeKit switch for controlling a fireplace! Now I just need to make another one but I can't seem to find another relay in my drawers.
 
-A couple of notes regarding the sketch:
+A couple of notes regarding the build:
 
 * The dev board I have in hand has 4MB flash memory. The default partition scheme only allocates 1.2MB to the app and that's not big enough for HomeSpan. In Arduino Studio, I was able to choose a scheme with 3MB for the app with no OTA (flashing over WiFi). I'm sure you can make a custom partition to accomodate OTA but I didn't bother. OTA is nice but I doubt I'd need to flash it once it's up and running. And it's not that big of a deal if I need to open up the wall and flash it.
 
-* In Arduino Studio, choose "Nologo ESP32C3 SuperMini" as the board. 
+* In Arduino Studio, choose "Nologo ESP32C3 SuperMini" as the board.
+
+* I am powering the MCU on its 5V  pin directly. It doesn't seem to suffer the weird WiFi issue I experienced in the [doors and windows](doors_and_windows/) project. I randomly chose pin 5 to control the relay, mostly to make laying out the wire easy.
+
+[pinout](esp32-c3-pinout.jpg)
