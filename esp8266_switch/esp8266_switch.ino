@@ -30,9 +30,6 @@
 #define PIN_SWITCH 0
 
 void setup() {
-  pinMode(PIN_SWITCH, OUTPUT);
-  digitalWrite(PIN_SWITCH, HIGH);
-
   Serial.begin(115200);
   wifi_connect(); // in wifi_info.h
   // homekit_storage_reset(); // to remove the previous HomeKit pairing storage
@@ -60,12 +57,12 @@ void cha_switch_on_setter(const homekit_value_t value) {
   bool on = value.bool_value;
   cha_switch_on.value.bool_value = on; // sync the value
   LOG_D("Switch: %s", on ? "ON" : "OFF");
-  digitalWrite(PIN_SWITCH, on ? LOW : HIGH);
+  digitalWrite(PIN_SWITCH, on ? HIGH : LOW);
 }
 
 void my_homekit_setup() {
   pinMode(PIN_SWITCH, OUTPUT);
-  digitalWrite(PIN_SWITCH, HIGH);
+  digitalWrite(PIN_SWITCH, LOW);
 
   // Add the .setter function to get the switch-event sent from iOS Home APP.
   // The .setter should be added before arduino_homekit_setup.
