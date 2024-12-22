@@ -25,21 +25,41 @@
 #include <Arduino.h>
 #include <arduino_homekit_server.h>
 
+#if defined(ESP8266)
+#include <ESP8266WiFi.h>
+#elif defined(ESP32)
+#include <WiFi.h>
+#endif
+
 #define LOG_D(fmt, ...) printf_P(PSTR(fmt "\n"), ##__VA_ARGS__);
 
 #define PIN_SWITCH 0
 
 void setup() {
   Serial.begin(115200);
+  my_homekit_setup();
   wifi_connect(); // in wifi_info.h
   // homekit_storage_reset(); // to remove the previous HomeKit pairing storage
   // when you first run this new HomeKit example
-  my_homekit_setup();
 }
 
 void loop() {
   my_homekit_loop();
   delay(10);
+}
+
+void wifi_connect() {
+  WiFi.persistent(false);
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.begin(ssid, password);
+  Serial.println("WiFi connecting...");
+  while (!WiFi.isConnected()) {
+    delay(100);
+    Serial.print(".");
+  }
+  Serial.print("\n");
+  Serial.printf("WiFi connected, IP: %s\n", WiFi.localIP().toString().c_str());
 }
 
 //==============================
