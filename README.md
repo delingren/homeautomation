@@ -5,3 +5,4 @@ This is a collection of my home automation/smart home projects, integrated into 
 1. [Contact sensors & temperature and humidity sensor](doors_and_windows/README.md). A security system for monitoring status of doors and windows, and a wireless temperature and humidity sensor. It's two unrelated features smashed together.
 1. [Garage door opener](garage_door_opener/README.md). This project turns a dumb garage opener into a smart one, integrated with HomeKit, and with online logging.
 1. [ESP8266 based switch](esp8266_switch/README.md). A simple smart switch based on ESP8266, a deviation from ESP32.
+1. [Nightlight 1.0](night_light/README.md). A compact light directly plugged into the electrical socket. It's also based on ESP8266. 
