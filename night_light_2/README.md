@@ -29,3 +29,9 @@ The resistor, MOSFET, and wiring is soldered onto the perf board, which is then 
 
 Everything else is fastened with double sided tapes and hot glue.
 
+![assembly](IMG_0760.jpeg)
+
+## Final product
+
+![final](IMG_0761.jpeg)
+
