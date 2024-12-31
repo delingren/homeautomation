@@ -6,3 +6,4 @@ This is a collection of my home automation/smart home projects, integrated into 
 1. [Garage door opener](garage_door_opener/README.md). This project turns a dumb garage opener into a smart one, integrated with HomeKit, and with online logging.
 1. [ESP8266 based switch](esp8266_switch/README.md). A simple smart switch based on ESP8266, a deviation from ESP32.
 1. [Nightlight 1.0](night_light/README.md). A compact light directly plugged into the electrical socket. It's also based on ESP8266. 
+1. [Nightlight 2.0](night_light_2/README.md). An upgrade to Nightlight 1.0, using an ESP32 microcontroller and with a manual toggle.

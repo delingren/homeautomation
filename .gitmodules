@@ -7,3 +7,6 @@
 [submodule "fireplace_switch/third_party/HomeSpan"]
 	path = fireplace_switch/third_party/HomeSpan
 	url = https://github.com/HomeSpan/HomeSpan.git
+[submodule "night_light_2/third_party/HomeSpan"]
+	path = night_light_2/third_party/HomeSpan
+	url = https://github.com/HomeSpan/HomeSpan.git
